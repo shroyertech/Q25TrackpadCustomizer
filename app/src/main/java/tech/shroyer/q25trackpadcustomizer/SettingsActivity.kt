@@ -1,15 +1,23 @@
 package tech.shroyer.q25trackpadcustomizer
 
 import android.R as AndroidR
-import android.app.Activity
 import android.app.AlertDialog
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Paint
+import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.Gravity
 import android.view.KeyEvent
+import android.view.View
+import android.view.ViewGroup
 import android.widget.*
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -46,6 +54,9 @@ class SettingsActivity : AppCompatActivity() {
     // Backup/restore UI
     private lateinit var btnBackupSettings: Button
     private lateinit var btnRestoreSettings: Button
+
+    // Updates UI
+    private lateinit var btnCheckUpdates: Button
 
     // Exclusions UI
     private lateinit var btnAddExcludedApps: Button
@@ -94,9 +105,21 @@ class SettingsActivity : AppCompatActivity() {
         "Scroll wheel"
     )
 
+    // Prevent UI refresh from writing prefs.
+    private var suppressUiListeners = false
+
+    private val backupCreateLauncher =
+        registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+            if (uri != null) handleBackupCreate(uri)
+        }
+
+    private val restoreOpenLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) handleRestoreOpen(uri)
+        }
+
     companion object {
-        private const val REQUEST_BACKUP_CREATE = 1001
-        private const val REQUEST_RESTORE_OPEN = 1002
+        private const val TAG_VIEW_ON_GITHUB_LINK = "view_on_github_link"
     }
 
     private fun getAppVersionName(): String {
@@ -152,6 +175,11 @@ class SettingsActivity : AppCompatActivity() {
         btnBackupSettings = findViewById(R.id.btnBackupSettings)
         btnRestoreSettings = findViewById(R.id.btnRestoreSettings)
 
+        // Updates
+        btnCheckUpdates = findViewById(R.id.btnCheckUpdates)
+        setupUpdateChecker()
+        setupViewOnGitHubLink()
+
         // Exclusions
         btnAddExcludedApps = findViewById(R.id.btnAddExcludedApps)
         recyclerExcludedApps = findViewById(R.id.recyclerExcludedApps)
@@ -167,6 +195,72 @@ class SettingsActivity : AppCompatActivity() {
         setupExcludedAppsSection()
     }
 
+    override fun onResume() {
+        super.onResume()
+        refreshUiFromPrefs()
+    }
+
+    private fun refreshUiFromPrefs() {
+        if (!::prefs.isInitialized) return
+
+        suppressUiListeners = true
+        try {
+            // Toasts
+            if (::checkToastQuick.isInitialized) checkToastQuick.isChecked = prefs.isToastQuickToggleEnabled()
+            if (::checkToastPerApp.isInitialized) checkToastPerApp.isChecked = prefs.isToastPerAppEnabled()
+            if (::checkToastDefault.isInitialized) checkToastDefault.isChecked = prefs.isToastDefaultModeEnabled()
+            if (::checkToastHoldKey.isInitialized) checkToastHoldKey.isChecked = prefs.isToastHoldKeyEnabled()
+
+            // Theme spinner
+            if (::spinnerTheme.isInitialized) {
+                val currentTheme = prefs.getThemePref()
+                val idx = themeOptions.indexOf(currentTheme).coerceAtLeast(0)
+                if (spinnerTheme.selectedItemPosition != idx) {
+                    spinnerTheme.setSelection(idx, false)
+                }
+            }
+
+            // Auto keyboard
+            if (::checkAutoKeyboardText.isInitialized) {
+                checkAutoKeyboardText.isChecked = prefs.isGlobalAutoKeyboardForTextEnabled()
+            }
+
+            // Hold-key globals
+            if (::spinnerGlobalHoldMode.isInitialized) {
+                val currentMode = prefs.getGlobalHoldMode()
+                val idx = holdModeOptions.indexOf(currentMode).coerceAtLeast(0)
+                if (spinnerGlobalHoldMode.selectedItemPosition != idx) {
+                    spinnerGlobalHoldMode.setSelection(idx, false)
+                }
+            }
+            if (::tvGlobalHoldKeyCode.isInitialized) {
+                refreshHoldKeyCodeLabel(prefs.getGlobalHoldKeyCode())
+            }
+            if (::checkHoldAllowedInTextGlobal.isInitialized) {
+                checkHoldAllowedInTextGlobal.isChecked = prefs.isGlobalHoldAllowedInTextFields()
+            }
+
+            // Scroll globals
+            if (::spinnerScrollSensitivity.isInitialized) {
+                val current = prefs.getGlobalScrollSettings()
+                val idx = scrollSensOptions.indexOf(current.sensitivity).coerceAtLeast(0)
+                if (spinnerScrollSensitivity.selectedItemPosition != idx) {
+                    spinnerScrollSensitivity.setSelection(idx, false)
+                }
+                if (::checkScrollHorizontal.isInitialized) checkScrollHorizontal.isChecked = current.horizontalEnabled
+                if (::checkScrollInvertVertical.isInitialized) checkScrollInvertVertical.isChecked = current.invertVertical
+                if (::checkScrollInvertHorizontal.isInitialized) checkScrollInvertHorizontal.isChecked = current.invertHorizontal
+            }
+
+            // Exclusions list
+            if (::editSearchExcluded.isInitialized && ::excludedAdapter.isInitialized) {
+                refreshExcludedList(editSearchExcluded.text?.toString().orEmpty())
+            }
+        } finally {
+            suppressUiListeners = false
+        }
+    }
+
     // ---------- Toast & Theme ----------
 
     private fun setupToasts() {
@@ -176,15 +270,19 @@ class SettingsActivity : AppCompatActivity() {
         checkToastHoldKey.isChecked = prefs.isToastHoldKeyEnabled()
 
         checkToastQuick.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressUiListeners) return@setOnCheckedChangeListener
             prefs.setToastQuickToggleEnabled(isChecked)
         }
         checkToastPerApp.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressUiListeners) return@setOnCheckedChangeListener
             prefs.setToastPerAppEnabled(isChecked)
         }
         checkToastDefault.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressUiListeners) return@setOnCheckedChangeListener
             prefs.setToastDefaultModeEnabled(isChecked)
         }
         checkToastHoldKey.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressUiListeners) return@setOnCheckedChangeListener
             prefs.setToastHoldKeyEnabled(isChecked)
         }
     }
@@ -200,9 +298,11 @@ class SettingsActivity : AppCompatActivity() {
 
         val currentTheme = prefs.getThemePref()
         val index = themeOptions.indexOf(currentTheme).coerceAtLeast(0)
+
         spinnerTheme.setSelection(index, false)
 
         spinnerTheme.setOnItemSelectedListenerSimple { position ->
+            if (suppressUiListeners) return@setOnItemSelectedListenerSimple
             val selectedTheme = themeOptions[position]
             if (selectedTheme != prefs.getThemePref()) {
                 prefs.setThemePref(selectedTheme)
@@ -217,6 +317,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun setupAutoKeyboardForText() {
         checkAutoKeyboardText.isChecked = prefs.isGlobalAutoKeyboardForTextEnabled()
         checkAutoKeyboardText.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressUiListeners) return@setOnCheckedChangeListener
             prefs.setGlobalAutoKeyboardForTextEnabled(isChecked)
         }
     }
@@ -237,6 +338,7 @@ class SettingsActivity : AppCompatActivity() {
         spinnerGlobalHoldMode.setSelection(modeIndex, false)
 
         spinnerGlobalHoldMode.setOnItemSelectedListenerSimple { position ->
+            if (suppressUiListeners) return@setOnItemSelectedListenerSimple
             val selected = holdModeOptions[position]
             if (selected != prefs.getGlobalHoldMode()) {
                 prefs.setGlobalHoldMode(selected)
@@ -247,7 +349,6 @@ class SettingsActivity : AppCompatActivity() {
 
         btnSetGlobalHoldKey.setOnClickListener {
             showKeyCaptureDialog(
-                title = "Set hold modifier key",
                 initialKeyCode = prefs.getGlobalHoldKeyCode(),
                 onKeySelected = { keyCode ->
                     prefs.setGlobalHoldKeyCode(keyCode)
@@ -263,16 +364,16 @@ class SettingsActivity : AppCompatActivity() {
 
         checkHoldAllowedInTextGlobal.isChecked = prefs.isGlobalHoldAllowedInTextFields()
         checkHoldAllowedInTextGlobal.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressUiListeners) return@setOnCheckedChangeListener
             prefs.setGlobalHoldAllowedInTextFields(isChecked)
         }
     }
 
     private fun refreshHoldKeyCodeLabel(keyCode: Int) {
-        tvGlobalHoldKeyCode.text = "${keyCode} (${KeyEvent.keyCodeToString(keyCode)})"
+        tvGlobalHoldKeyCode.text = "$keyCode (${KeyEvent.keyCodeToString(keyCode)})"
     }
 
     private fun showKeyCaptureDialog(
-        title: String,
         initialKeyCode: Int,
         onKeySelected: (Int) -> Unit,
         onDefault: () -> Unit
@@ -283,7 +384,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         val dialog = AlertDialog.Builder(this)
-            .setTitle(title)
+            .setTitle("Set hold modifier key")
             .setView(message)
             .setPositiveButton("Cancel") { d, _ -> d.dismiss() }
             .setNeutralButton("Default") { d, _ ->
@@ -321,6 +422,7 @@ class SettingsActivity : AppCompatActivity() {
         spinnerScrollSensitivity.setSelection(index, false)
 
         spinnerScrollSensitivity.setOnItemSelectedListenerSimple { position ->
+            if (suppressUiListeners) return@setOnItemSelectedListenerSimple
             val sens = scrollSensOptions[position]
             prefs.setGlobalScrollSensitivity(sens)
         }
@@ -330,12 +432,15 @@ class SettingsActivity : AppCompatActivity() {
         checkScrollInvertHorizontal.isChecked = current.invertHorizontal
 
         checkScrollHorizontal.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressUiListeners) return@setOnCheckedChangeListener
             prefs.setGlobalScrollHorizontalEnabled(isChecked)
         }
         checkScrollInvertVertical.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressUiListeners) return@setOnCheckedChangeListener
             prefs.setGlobalScrollInvertVertical(isChecked)
         }
         checkScrollInvertHorizontal.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressUiListeners) return@setOnCheckedChangeListener
             prefs.setGlobalScrollInvertHorizontal(isChecked)
         }
     }
@@ -344,64 +449,224 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun setupBackupRestore() {
         btnBackupSettings.setOnClickListener {
-            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = "application/json"
-                putExtra(Intent.EXTRA_TITLE, "q25_settings_backup_${System.currentTimeMillis()}.json")
-            }
-            startActivityForResult(intent, REQUEST_BACKUP_CREATE)
+            val name = "q25_settings_backup_${System.currentTimeMillis()}.json"
+            backupCreateLauncher.launch(name)
         }
 
         btnRestoreSettings.setOnClickListener {
-            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = "application/json"
-            }
-            startActivityForResult(intent, REQUEST_RESTORE_OPEN)
+            restoreOpenLauncher.launch(arrayOf("application/json"))
         }
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
+    private fun handleBackupCreate(uri: Uri) {
+        try {
+            contentResolver.openOutputStream(uri)?.use { out ->
+                val json = SettingsBackup.exportToJson(this)
+                out.write(json.toByteArray(Charsets.UTF_8))
+            }
+            Toast.makeText(this, "Settings backup saved.", Toast.LENGTH_SHORT).show()
+        } catch (_: Exception) {
+            Toast.makeText(this, "Failed to save backup.", Toast.LENGTH_LONG).show()
+        }
+    }
 
-        if (resultCode != Activity.RESULT_OK || data?.data == null) return
-
-        val uri = data.data!!
-
-        when (requestCode) {
-            REQUEST_BACKUP_CREATE -> {
-                try {
-                    contentResolver.openOutputStream(uri)?.use { out ->
-                        val json = SettingsBackup.exportToJson(this)
-                        out.write(json.toByteArray(Charsets.UTF_8))
-                    }
-                    Toast.makeText(this, "Settings backup saved.", Toast.LENGTH_SHORT).show()
-                } catch (_: Exception) {
-                    Toast.makeText(this, "Failed to save backup.", Toast.LENGTH_LONG).show()
-                }
+    private fun handleRestoreOpen(uri: Uri) {
+        try {
+            val json = contentResolver.openInputStream(uri)?.bufferedReader().use { it?.readText() }
+            if (json.isNullOrBlank()) {
+                Toast.makeText(this, "Invalid or empty backup file.", Toast.LENGTH_LONG).show()
+                return
             }
 
-            REQUEST_RESTORE_OPEN -> {
-                try {
-                    val json = contentResolver.openInputStream(uri)?.bufferedReader().use { it?.readText() }
-                    if (json.isNullOrBlank()) {
-                        Toast.makeText(this, "Invalid or empty backup file.", Toast.LENGTH_LONG).show()
-                        return
-                    }
+            val success = SettingsBackup.restoreFromJson(this, json)
+            if (success) {
+                Toast.makeText(this, "Backup restored. Restarting settings...", Toast.LENGTH_SHORT).show()
+                Prefs.applyThemeFromPrefs(this)
+                recreate()
+            } else {
+                Toast.makeText(this, "Invalid backup file.", Toast.LENGTH_LONG).show()
+            }
+        } catch (_: Exception) {
+            Toast.makeText(this, "Failed to restore backup.", Toast.LENGTH_LONG).show()
+        }
+    }
 
-                    val success = SettingsBackup.restoreFromJson(this, json)
-                    if (success) {
-                        Toast.makeText(this, "Backup restored. Restarting settings...", Toast.LENGTH_SHORT).show()
-                        Prefs.applyThemeFromPrefs(this)
-                        recreate()
-                    } else {
-                        Toast.makeText(this, "Invalid backup file.", Toast.LENGTH_LONG).show()
-                    }
-                } catch (_: Exception) {
-                    Toast.makeText(this, "Failed to restore backup.", Toast.LENGTH_LONG).show()
-                }
+    // ---------- Updates (manual GitHub release check) ----------
+
+    private fun setupUpdateChecker() {
+        btnCheckUpdates.setOnClickListener {
+            checkForUpdatesManual()
+        }
+    }
+
+    private fun setupViewOnGitHubLink() {
+        val parent = btnCheckUpdates.parent as? ViewGroup ?: return
+        val existing = parent.findViewWithTag<View>(TAG_VIEW_ON_GITHUB_LINK)
+        if (existing != null) return
+
+        val link = TextView(this).apply {
+            tag = TAG_VIEW_ON_GITHUB_LINK
+            text = "View on GitHub"
+            textSize = 12f
+            paintFlags = paintFlags or Paint.UNDERLINE_TEXT_FLAG
+            setPadding(0, dp(6), 0, dp(2))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                openGitHubReleasePage()
             }
         }
+
+        // Try to insert immediately after the "Check for updates" button.
+        val idx = parent.indexOfChild(btnCheckUpdates)
+        if (idx >= 0 && idx < parent.childCount - 1) {
+            parent.addView(link, idx + 1)
+        } else {
+            parent.addView(link)
+        }
+    }
+
+    private fun openGitHubReleasePage() {
+        // Open the stable web URL
+        openInBrowser(UpdateChecker.LATEST_RELEASE_WEB_URL)
+    }
+
+    private fun checkForUpdatesManual() {
+        val installedRaw = getAppVersionName().ifBlank { "0.0.0" }
+        val installedDisplay = UpdateChecker.normalizeForDisplay(installedRaw)
+
+        val progress = showUpdateCheckProgressDialog()
+
+        Thread {
+            val result = UpdateChecker.fetchLatestRelease()
+
+            Handler(Looper.getMainLooper()).post {
+                try {
+                    progress.dismiss()
+                } catch (_: Exception) {
+                }
+
+                when (result) {
+                    is UpdateChecker.Result.Error -> {
+                        AlertDialog.Builder(this)
+                            .setTitle("Update check failed")
+                            .setMessage(result.message)
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
+
+                    is UpdateChecker.Result.Success -> {
+                        val latestTag = result.release.tagName
+                        val latestDisplay = UpdateChecker.normalizeForDisplay(latestTag)
+                        val cmp = UpdateChecker.compareVersions(installedRaw, latestTag)
+
+                        when {
+                            cmp > 0 -> {
+                                AlertDialog.Builder(this)
+                                    .setTitle("You’re ahead of GitHub!")
+                                    .setMessage(
+                                        "Installed version is newer than latest version. What's it like in the future?\n\n" +
+                                                "Installed: $installedDisplay\n" +
+                                                "Latest: $latestDisplay"
+                                    )
+                                    .setPositiveButton("OK", null)
+                                    .setNeutralButton("View on GitHub") { _, _ ->
+                                        openInBrowser(result.release.htmlUrl)
+                                    }
+                                    .show()
+                            }
+
+                            cmp == 0 -> {
+                                AlertDialog.Builder(this)
+                                    .setTitle("No update available")
+                                    .setMessage(
+                                        "Already on the latest update.\n\n" +
+                                                "Installed: $installedDisplay\n" +
+                                                "Latest: $latestDisplay"
+                                    )
+                                    .setPositiveButton("OK", null)
+                                    .setNeutralButton("View on GitHub") { _, _ ->
+                                        openInBrowser(result.release.htmlUrl)
+                                    }
+                                    .show()
+                            }
+
+                            else -> {
+                                val openUrl = result.release.apkUrl ?: result.release.htmlUrl
+                                val openLabel = if (result.release.apkUrl != null) {
+                                    "Open APK download"
+                                } else {
+                                    "Open release page"
+                                }
+
+                                AlertDialog.Builder(this)
+                                    .setTitle("Update available!")
+                                    .setMessage(
+                                        "An update is available! How exciting.\n\n" +
+                                                "Installed: $installedDisplay\n" +
+                                                "Latest: $latestDisplay\n\n" +
+                                                "After updating, you will need to re-enable the Accessibility Service!"
+                                    )
+                                    .setPositiveButton(openLabel) { _, _ ->
+                                        openInBrowser(openUrl)
+                                    }
+                                    .setNeutralButton("View on GitHub") { _, _ ->
+                                        openInBrowser(result.release.htmlUrl)
+                                    }
+                                    .setNegativeButton("Cancel", null)
+                                    .show()
+                            }
+                        }
+                    }
+                }
+            }
+        }.start()
+    }
+
+    private fun openInBrowser(url: String) {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            startActivity(intent)
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, "No browser found to open the link.", Toast.LENGTH_LONG).show()
+        } catch (_: Exception) {
+            Toast.makeText(this, "Failed to open link.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun showUpdateCheckProgressDialog(): AlertDialog {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(48, 32, 48, 32)
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        val bar = ProgressBar(this).apply {
+            isIndeterminate = true
+        }
+
+        val tv = TextView(this).apply {
+            text = "Comparing installed vs latest release on GitHub."
+            setPadding(32, 0, 0, 0)
+        }
+
+        container.addView(bar)
+        container.addView(tv)
+
+        return AlertDialog.Builder(this)
+            .setTitle("Checking for updates…")
+            .setView(container)
+            .setCancelable(false)
+            .create()
+            .also { it.show() }
+    }
+
+    private fun dp(value: Int): Int {
+        return (value * resources.displayMetrics.density).toInt()
     }
 
     // ---------- Excluded Apps Section ----------
@@ -483,15 +748,15 @@ class SettingsActivity : AppCompatActivity() {
             .create()
 
         val allCandidates = loadCandidateAppsForExclusion()
-        var pickerAdapter: ExclusionPickerAdapter? = null
 
+        lateinit var pickerAdapter: ExclusionPickerAdapter
         pickerAdapter = ExclusionPickerAdapter(
             this,
             allCandidates.toMutableList()
         ) { app ->
             prefs.addExcludedPackage(app.packageName)
             refreshExcludedList(editSearchExcluded.text?.toString().orEmpty())
-            pickerAdapter?.removeApp(app.packageName)
+            pickerAdapter.removeApp(app.packageName)
         }
 
         recycler.layoutManager = LinearLayoutManager(this)
@@ -501,7 +766,7 @@ class SettingsActivity : AppCompatActivity() {
             override fun afterTextChanged(s: Editable?) {}
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                pickerAdapter?.filter(s?.toString().orEmpty())
+                pickerAdapter.filter(s?.toString().orEmpty())
             }
         })
 

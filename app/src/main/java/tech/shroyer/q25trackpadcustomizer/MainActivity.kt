@@ -55,6 +55,9 @@ class MainActivity : AppCompatActivity() {
         "Scroll wheel mode"
     )
 
+    // Prevents spinner refresh from writing prefs
+    private var suppressSystemDefaultListener = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         Prefs.applyThemeFromPrefs(this)
         super.onCreate(savedInstanceState)
@@ -78,6 +81,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Re-sync global UI from prefs
+        refreshSystemDefaultSpinnerFromPrefs()
         refreshAppList(editSearch.text?.toString().orEmpty())
     }
 
@@ -98,11 +103,27 @@ class MainActivity : AppCompatActivity() {
 
         val current = prefs.getSystemDefaultMode()
         val index = systemDefaultOptions.indexOf(current).coerceAtLeast(0)
+
+        suppressSystemDefaultListener = true
         spinnerSystemDefault.setSelection(index, false)
+        suppressSystemDefaultListener = false
 
         spinnerSystemDefault.setOnItemSelectedListenerSimple { position ->
+            if (suppressSystemDefaultListener) return@setOnItemSelectedListenerSimple
             val mode = systemDefaultOptions[position]
             prefs.setSystemDefaultMode(mode)
+        }
+    }
+
+    private fun refreshSystemDefaultSpinnerFromPrefs() {
+        if (!::spinnerSystemDefault.isInitialized) return
+        val current = prefs.getSystemDefaultMode()
+        val desiredIndex = systemDefaultOptions.indexOf(current).coerceAtLeast(0)
+
+        if (spinnerSystemDefault.selectedItemPosition != desiredIndex) {
+            suppressSystemDefaultListener = true
+            spinnerSystemDefault.setSelection(desiredIndex, false)
+            suppressSystemDefaultListener = false
         }
     }
 

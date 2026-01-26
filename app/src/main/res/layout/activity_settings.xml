@@ -98,6 +98,7 @@
             android:layout_marginBottom="12dp"
             android:background="?android:attr/listDivider" />
 
+
         <!-- Theme -->
         <TextView
             android:id="@+id/tvThemeLabel"
@@ -291,6 +292,35 @@
                 android:text="Invert horizontal"
                 android:textSize="12sp" />
         </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginBottom="8dp"
+            android:background="?android:attr/listDivider" />
+
+        <!-- Updates -->
+        <TextView
+            android:id="@+id/tvUpdatesLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Updates"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <Button
+            android:id="@+id/btnCheckUpdates"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Check for updates"
+            android:layout_marginBottom="8dp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginBottom="8dp"
+            android:background="?android:attr/listDivider" />
 
         <View
             android:layout_width="match_parent"
