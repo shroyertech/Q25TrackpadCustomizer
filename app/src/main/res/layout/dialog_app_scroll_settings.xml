@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:orientation="vertical"
+        android:padding="12dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:id="@+id/tvScrollDialogTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="App settings"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp" />
+
+        <!-- HOLD-KEY (PER-APP) -->
+
+        <TextView
+            android:id="@+id/tvHoldSectionLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Hold-key switching"
+            android:textStyle="bold"
+            android:textSize="14sp"
+            android:layout_marginTop="2dp"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvHoldModeLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Hold mode"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/spinnerAppHoldMode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/tvHoldKeyLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Hold key"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/tvAppHoldKeyCode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="SHIFT LEFT (59)"
+            android:textSize="12sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:layout_marginTop="2dp"
+            android:layout_marginBottom="6dp" />
+
+        <Button
+            android:id="@+id/btnSetAppHoldKey"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Set hold key"
+            android:layout_marginBottom="6dp" />
+
+        <CheckBox
+            android:id="@+id/checkHoldAllowedInTextApp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Allow hold switching in text fields"
+            android:textSize="12sp"
+            android:layout_marginBottom="10dp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="?android:attr/listDivider"
+            android:layout_marginBottom="10dp" />
+
+        <!-- SCROLL (PER-APP) -->
+
+        <TextView
+            android:id="@+id/tvScrollSectionLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Scroll wheel settings"
+            android:textStyle="bold"
+            android:textSize="14sp"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvScrollSensitivityLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Sensitivity"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/spinnerAppScrollSensitivity"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp" />
+
+        <CheckBox
+            android:id="@+id/checkAppScrollHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Enable horizontal scroll"
+            android:textSize="12sp"
+            android:layout_marginBottom="4dp" />
+
+        <LinearLayout
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp">
+
+            <CheckBox
+                android:id="@+id/checkAppScrollInvertVertical"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Invert vertical"
+                android:textSize="12sp" />
+
+            <CheckBox
+                android:id="@+id/checkAppScrollInvertHorizontal"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Invert horizontal"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="?android:attr/listDivider"
+            android:layout_marginBottom="10dp" />
+
+        <!-- AUTO KEYBOARD (PER-APP) -->
+
+        <CheckBox
+            android:id="@+id/checkAppAutoKeyboard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Auto keyboard on text input for this app"
+            android:textSize="12sp" />
+
+    </LinearLayout>
+</ScrollView>

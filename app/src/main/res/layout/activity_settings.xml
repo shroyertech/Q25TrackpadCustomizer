@@ -1,0 +1,351 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/scrollSettingsRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:id="@+id/layoutSettingsRoot"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <!-- Title + version -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="2dp">
+
+            <TextView
+                android:id="@+id/tvSettingsTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Settings"
+                android:textStyle="bold"
+                android:textSize="18sp" />
+
+            <TextView
+                android:id="@+id/tvSettingsVersion"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="v1.0"
+                android:textSize="12sp"
+                android:textColor="?android:attr/textColorSecondary" />
+        </LinearLayout>
+
+        <!-- Toast section subtitle -->
+        <TextView
+            android:id="@+id/tvSettingsSubtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Toast notifications"
+            android:textSize="12sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:layout_marginBottom="4dp" />
+
+        <!-- Toast options (row 1) -->
+        <LinearLayout
+            android:id="@+id/layoutToastOptions"
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="4dp">
+
+            <CheckBox
+                android:id="@+id/checkToastQuick"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Quick toggle"
+                android:textSize="12sp" />
+
+            <CheckBox
+                android:id="@+id/checkToastPerApp"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Per-app"
+                android:textSize="12sp" />
+
+            <CheckBox
+                android:id="@+id/checkToastDefault"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Default mode"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- Toast options (row 2) -->
+        <CheckBox
+            android:id="@+id/checkToastHoldKey"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Hold-key"
+            android:textSize="12sp"
+            android:layout_marginBottom="8dp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="12dp"
+            android:background="?android:attr/listDivider" />
+
+        <!-- Theme -->
+        <TextView
+            android:id="@+id/tvThemeLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="App theme"
+            android:textSize="14sp" />
+
+        <Spinner
+            android:id="@+id/spinnerTheme"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Backup & Restore -->
+        <TextView
+            android:id="@+id/tvBackupLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Backup &amp; restore"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <LinearLayout
+            android:id="@+id/layoutBackupRow"
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp">
+
+            <Button
+                android:id="@+id/btnBackupSettings"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Backup settings" />
+
+            <Button
+                android:id="@+id/btnRestoreSettings"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="Restore settings" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginBottom="8dp"
+            android:background="?android:attr/listDivider" />
+
+        <!-- Text input behavior -->
+        <TextView
+            android:id="@+id/tvTextInputBehaviorLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Text input behavior"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <CheckBox
+            android:id="@+id/checkAutoKeyboardText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Automatically switch to keyboard mode when a text field is focused"
+            android:textSize="12sp"
+            android:layout_marginBottom="8dp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginBottom="8dp"
+            android:background="?android:attr/listDivider" />
+
+        <!-- Hold-key switching -->
+        <TextView
+            android:id="@+id/tvHoldKeyLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Hold-key switching"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvHoldModeLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Hold mode"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/spinnerGlobalHoldMode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/tvHoldKeyLabel2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Hold key"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/tvGlobalHoldKeyCode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="SHIFT LEFT (59)"
+            android:textSize="12sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:layout_marginTop="2dp"
+            android:layout_marginBottom="6dp" />
+
+        <Button
+            android:id="@+id/btnSetGlobalHoldKey"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Set hold key"
+            android:layout_marginBottom="6dp" />
+
+        <CheckBox
+            android:id="@+id/checkHoldAllowedInTextGlobal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Allow hold switching in text fields"
+            android:textSize="12sp"
+            android:layout_marginBottom="8dp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginBottom="8dp"
+            android:background="?android:attr/listDivider" />
+
+        <!-- Global scroll wheel settings -->
+        <TextView
+            android:id="@+id/tvScrollSettingsLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Scroll wheel settings"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvScrollSensLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Sensitivity"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/spinnerScrollSensitivity"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp" />
+
+        <LinearLayout
+            android:id="@+id/layoutScrollOptionsRow"
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+
+            <CheckBox
+                android:id="@+id/checkScrollHorizontal"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Horizontal"
+                android:textSize="12sp" />
+
+            <CheckBox
+                android:id="@+id/checkScrollInvertVertical"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Invert vertical"
+                android:textSize="12sp" />
+
+            <CheckBox
+                android:id="@+id/checkScrollInvertHorizontal"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Invert horizontal"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginBottom="8dp"
+            android:background="?android:attr/listDivider" />
+
+        <!-- Excluded apps section -->
+        <TextView
+            android:id="@+id/tvExcludedLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Excluded apps (ignored for mode switching)"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <LinearLayout
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="4dp">
+
+            <EditText
+                android:id="@+id/editSearchExcluded"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="Search exclusions..."
+                android:singleLine="true" />
+
+            <ImageButton
+                android:id="@+id/btnResetExcluded"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Reset exclusions to default"
+                android:src="@android:drawable/ic_menu_revert" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnAddExcludedApps"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Add apps to exclusion list"
+            android:layout_marginBottom="4dp" />
+
+        <!-- Fixed-height list; screen scrolls -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerExcludedApps"
+            android:layout_width="match_parent"
+            android:layout_height="200dp"
+            android:nestedScrollingEnabled="false" />
+
+    </LinearLayout>
+</ScrollView>

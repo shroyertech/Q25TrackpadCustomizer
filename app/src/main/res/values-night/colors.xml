@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Primary brand red (dark mode) -->
+    <color name="q25_primary">#FFEF5350</color>        <!-- slightly brighter red -->
+    <color name="q25_on_primary">#FF000000</color>     <!-- dark text/icons on lighter red -->
+
+    <!-- Secondary accent red (dark mode) -->
+    <color name="q25_secondary">#FFE53935</color>
+    <color name="q25_on_secondary">#FF000000</color>
+
+    <!-- Surfaces / backgrounds (dark) -->
+    <color name="q25_surface">#FF121212</color>        <!-- very dark surface -->
+    <color name="q25_on_surface">#FFFFFFFF</color>     <!-- white text -->
+
+    <color name="q25_background">#FF000000</color>     <!-- black background -->
+    <color name="q25_on_background">#FFFFFFFF</color>
+
+</resources>

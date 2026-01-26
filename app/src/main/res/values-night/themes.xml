@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- I reuse the same Material 3 DayNight theme for night as well -->
+    <style name="Theme.Q25TrackpadModeToggler" parent="Theme.Material3.DayNight.NoActionBar" />
+
+</resources>

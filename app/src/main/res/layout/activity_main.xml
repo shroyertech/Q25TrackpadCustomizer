@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:padding="8dp"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- Header with title and settings button -->
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/tvTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Q25 Trackpad Customizer"
+            android:textStyle="bold"
+            android:textSize="18sp"
+            android:padding="4dp" />
+
+        <ImageButton
+            android:id="@+id/btnSettings"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Settings"
+            android:src="@drawable/baseline_settings_24" />
+    </LinearLayout>
+
+    <!-- System default mode -->
+    <TextView
+        android:id="@+id/tvSystemDefaultLabel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="System default mode"
+        android:textSize="14sp" />
+
+    <Spinner
+        android:id="@+id/spinnerSystemDefault"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp" />
+
+    <!-- Set all apps to... -->
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical">
+
+        <Spinner
+            android:id="@+id/spinnerSetAllMode"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1" />
+
+        <Button
+            android:id="@+id/btnSetAll"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Apply to all" />
+    </LinearLayout>
+
+    <!-- Search bar -->
+    <EditText
+        android:id="@+id/editSearch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:layout_marginBottom="4dp"
+        android:hint="Search apps..."
+        android:singleLine="true" />
+
+    <TextView
+        android:id="@+id/tvPerAppLabel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Per-app settings"
+        android:textStyle="bold"
+        android:textSize="14sp"
+        android:layout_marginBottom="2dp" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerApps"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+</LinearLayout>

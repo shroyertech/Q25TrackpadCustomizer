@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Q25 Trackpad Customizer</string>
+    <string name="accessibility_service_description">
+        Automatically switches trackpad mode per app using your configured settings.
+    </string>
+    <string name="shortcut_quick_toggle_short">Quick Toggle</string>
+    <string name="shortcut_quick_toggle_long">Quick toggle trackpad mode</string>
+</resources>

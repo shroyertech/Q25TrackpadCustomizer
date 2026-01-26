@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Legacy Q25 colors kept only for compatibility; theme no longer depends on them -->
+    <color name="q25_primary">#FF6200EE</color>
+    <color name="q25_primary_variant">#FF3700B3</color>
+    <color name="q25_on_primary">#FFFFFFFF</color>
+
+    <color name="q25_background">#FFFFFFFF</color>
+    <color name="q25_surface">#FFFFFFFF</color>
+    <color name="q25_on_surface">#FF000000</color>
+
+    <!-- Basic black / white if any view needs them directly -->
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+</resources>

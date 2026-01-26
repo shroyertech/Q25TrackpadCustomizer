@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- I use the stock Material 3 DayNight theme with no manual color overrides,
+         so the app follows Material's default/dynamic color schemes. -->
+    <style name="Theme.Q25TrackpadModeToggler" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- No custom colorPrimary / background overrides on purpose -->
+    </style>
+
+</resources>
