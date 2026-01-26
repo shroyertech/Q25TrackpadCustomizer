@@ -26,3 +26,9 @@ Android app (Accessibility Service) for Zinwa Q25
 
 ## License
 See [LICENSE](LICENSE).
+
+## Donations
+- If you feel this app has improved your experience with your Q25, consider donating to the WVU Cancer Institute
+- You can make a donation [here](https://give.wvu.edu/give/430764/#!/donation/checkout)
+- You can read more about the WVU Cancer Institute [here](https://give.wvu.edu/campaign/wvu-cancer-institute/c430764)
+- Thank you <3
