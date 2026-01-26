@@ -7,7 +7,8 @@ Android app (Accessibility Service) for Zinwa Q25
 - Global default mode + “Apply to all”
 - Scroll wheel customization (sensitivity, invert, horizontal)
 - Auto switch to Keyboard when focusing text inputs (optional, with per-app override and global settings)
-- Hold-key temporary switching (optional, with per-app override and global settings)
+- Hold-key temporary switching - Enable an alternate mode while a key is held (optional, with per-app override and global settings)
+- Quick Toggle Activity - Includes an App Shortcut which can be called upon by KeyMapper app to cycle through available modes
 - Backup & restore settings
 
 ## Setup / Usage
