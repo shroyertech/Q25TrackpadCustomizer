@@ -11,7 +11,7 @@ Android app (Accessibility Service) for Zinwa Q25
 - Quick Toggle Activity - Includes an App Shortcut which can be called upon by KeyMapper app to cycle through available modes
 - Backup & restore settings
 
-##Download
+## Download
 - You can download the latest version [here](https://github.com/shroyertech/Q25TrackpadCustomizer/releases/tag/v1.0.0)
 
 ## Setup / Usage
