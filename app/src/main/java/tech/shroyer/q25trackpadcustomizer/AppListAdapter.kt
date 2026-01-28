@@ -8,20 +8,15 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.Button
 import android.widget.CheckBox
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.Spinner
 import android.widget.TextView
+import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
 
-/**
- * App list with per-app mode selection and a settings dialog.
- * The settings dialog includes:
- * - Scroll-wheel overrides (shown when effective mode is Scroll Wheel)
- * - Auto-keyboard override
- * - Hold-key overrides (mode, keycode, allow-in-text)
- */
 class AppListAdapter(
     private val context: Context,
     items: List<AppItem>,
@@ -45,7 +40,7 @@ class AppListAdapter(
         "Scroll wheel mode"
     )
 
-    // Hold mode spinner uses null to represent "Follow global" (no override stored).
+    // null = follow global (no override stored)
     private val holdModeOptions: List<HoldMode?> = listOf(
         null,
         HoldMode.DISABLED,
@@ -88,28 +83,15 @@ class AppListAdapter(
 
         val savedMode = prefs.getAppMode(app.packageName) ?: Mode.FOLLOW_SYSTEM
         val index = modeOptions.indexOf(savedMode).coerceAtLeast(0)
-
-        // Avoid triggering onItemSelected during binding
         holder.spinnerAppMode.setSelection(index, false)
 
-        // Gear is always visible (hold settings apply to all modes)
         holder.btnScrollSettings.visibility = View.VISIBLE
-
-        holder.btnScrollSettings.setOnClickListener {
-            showAppSettingsDialog(app)
-        }
+        holder.btnScrollSettings.setOnClickListener { showAppSettingsDialog(app) }
 
         holder.spinnerAppMode.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onNothingSelected(parent: AdapterView<*>?) = Unit
-
-            override fun onItemSelected(
-                parent: AdapterView<*>?,
-                view: View?,
-                pos: Int,
-                id: Long
-            ) {
-                val mode = modeOptions[pos]
-                prefs.setAppMode(app.packageName, mode)
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, pos: Int, id: Long) {
+                prefs.setAppMode(app.packageName, modeOptions[pos])
             }
         }
     }
@@ -127,18 +109,26 @@ class AppListAdapter(
         val checkInvertV = dialogView.findViewById<CheckBox>(R.id.checkAppScrollInvertVertical)
         val checkInvertH = dialogView.findViewById<CheckBox>(R.id.checkAppScrollInvertHorizontal)
 
-        // Auto keyboard control
+        // Auto keyboard
         val checkAutoKeyboard = dialogView.findViewById<CheckBox>(R.id.checkAppAutoKeyboard)
 
-        // Hold-key controls (must exist in layout you’re using)
-        val spinnerHoldMode = dialogView.findViewById<Spinner>(R.id.spinnerAppHoldMode)
-        val tvHoldKeyCode = dialogView.findViewById<TextView>(R.id.tvAppHoldKeyCode)
-        val btnSetHoldKey = dialogView.findViewById<View>(R.id.btnSetAppHoldKey)
-        val checkHoldAllowedInTextApp = dialogView.findViewById<CheckBox>(R.id.checkHoldAllowedInTextApp)
+        // Primary Hold
+        val spinnerHold1Mode = dialogView.findViewById<Spinner>(R.id.spinnerAppHoldMode)
+        val tvHold1KeyCode = dialogView.findViewById<TextView>(R.id.tvAppHoldKeyCode)
+        val btnSetHold1Key = dialogView.findViewById<Button>(R.id.btnSetAppHoldKey)
+        val checkHold1AllowInText = dialogView.findViewById<CheckBox>(R.id.checkHoldAllowedInTextApp)
+        val checkHold1DoubleRequired = dialogView.findViewById<CheckBox>(R.id.checkAppHoldDoublePressRequired)
+
+        // Secondary Hold
+        val checkHold2UseHold1Double = dialogView.findViewById<CheckBox>(R.id.checkAppHold2UseHold1DoublePressHold)
+        val spinnerHold2Mode = dialogView.findViewById<Spinner>(R.id.spinnerAppHold2Mode)
+        val tvHold2KeyCode = dialogView.findViewById<TextView>(R.id.tvAppHold2KeyCode)
+        val btnSetHold2Key = dialogView.findViewById<Button>(R.id.btnSetAppHold2Key)
+        val checkHold2AllowInText = dialogView.findViewById<CheckBox>(R.id.checkHold2AllowedInTextApp)
+        val checkHold2DoubleRequired = dialogView.findViewById<CheckBox>(R.id.checkAppHold2DoublePressRequired)
 
         tvTitle.text = "Settings for ${app.label}"
 
-        // Determine whether scroll controls should be shown based on EFFECTIVE mode
         val savedMode = prefs.getAppMode(app.packageName) ?: Mode.FOLLOW_SYSTEM
         val effectiveMode = when (savedMode) {
             Mode.MOUSE, Mode.KEYBOARD, Mode.SCROLL_WHEEL -> savedMode
@@ -146,7 +136,7 @@ class AppListAdapter(
         }
         val isScrollEffective = (effectiveMode == Mode.SCROLL_WHEEL)
 
-        // ---- Scroll wheel controls ----
+        // ----- Scroll wheel -----
         val sensLabels = listOf("Slow", "Medium", "Fast")
         val sensOptions = listOf(
             ScrollSensitivity.SLOW,
@@ -164,30 +154,22 @@ class AppListAdapter(
         spinnerSens.adapter = sensAdapter
 
         val effectiveScroll = prefs.getEffectiveScrollSettings(app.packageName)
-        val currentSensIndex = sensOptions.indexOf(effectiveScroll.sensitivity).coerceAtLeast(0)
-        spinnerSens.setSelection(currentSensIndex, false)
+        spinnerSens.setSelection(sensOptions.indexOf(effectiveScroll.sensitivity).coerceAtLeast(0), false)
         checkHorizontal.isChecked = effectiveScroll.horizontalEnabled
         checkInvertV.isChecked = effectiveScroll.invertVertical
         checkInvertH.isChecked = effectiveScroll.invertHorizontal
 
-        if (!isScrollEffective) {
-            tvScrollSensitivityLabel.visibility = View.GONE
-            spinnerSens.visibility = View.GONE
-            checkHorizontal.visibility = View.GONE
-            checkInvertV.visibility = View.GONE
-            checkInvertH.visibility = View.GONE
-        } else {
-            tvScrollSensitivityLabel.visibility = View.VISIBLE
-            spinnerSens.visibility = View.VISIBLE
-            checkHorizontal.visibility = View.VISIBLE
-            checkInvertV.visibility = View.VISIBLE
-            checkInvertH.visibility = View.VISIBLE
-        }
+        val scrollVis = if (isScrollEffective) View.VISIBLE else View.GONE
+        tvScrollSensitivityLabel.visibility = scrollVis
+        spinnerSens.visibility = scrollVis
+        checkHorizontal.visibility = scrollVis
+        checkInvertV.visibility = scrollVis
+        checkInvertH.visibility = scrollVis
 
-        // ---- Auto keyboard (effective shown; override saved on Save) ----
+        // ----- Auto keyboard -----
         checkAutoKeyboard.isChecked = prefs.isEffectiveAutoKeyboardForTextEnabled(app.packageName)
 
-        // ---- Hold mode spinner (null = follow global) ----
+        // ----- Hold mode adapters -----
         val holdModeAdapter = ArrayAdapter(
             context,
             android.R.layout.simple_spinner_item,
@@ -195,51 +177,220 @@ class AppListAdapter(
         ).apply {
             setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         }
-        spinnerHoldMode.adapter = holdModeAdapter
+        spinnerHold1Mode.adapter = holdModeAdapter
+        spinnerHold2Mode.adapter = holdModeAdapter
 
-        val holdModeOverride = prefs.getAppHoldModeOverride(app.packageName) // HoldMode? (null = follow)
-        var pendingHoldModeOverride: HoldMode? = holdModeOverride
-        val holdModeIndex = holdModeOptions.indexOf(holdModeOverride).let { if (it >= 0) it else 0 }
-        spinnerHoldMode.setSelection(holdModeIndex, false)
+        // ----- Pending values -----
+        val hold1ModeOverride = prefs.getAppHoldModeOverride(app.packageName)
+        var pendingHold1ModeOverride: HoldMode? = hold1ModeOverride
 
-        spinnerHoldMode.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                pendingHoldModeOverride = holdModeOptions[position]
+        val hold1KeyOverride = prefs.getAppHoldKeyCodeOverride(app.packageName)
+        var pendingHold1KeyOverride: Int? = hold1KeyOverride
+
+        var pendingHold1AllowInText = prefs.isEffectiveHoldAllowedInTextFields(app.packageName)
+        var pendingHold1DoubleRequired = prefs.isEffectiveHoldDoublePressRequired(app.packageName)
+
+        var pendingHold2ModeOverride: HoldMode? = prefs.getAppHold2ModeOverride(app.packageName)
+        var pendingHold2KeyOverride: Int? = prefs.getAppHold2KeyCodeOverride(app.packageName)
+        var pendingHold2AllowInText = prefs.isEffectiveHold2AllowedInTextFields(app.packageName)
+        var pendingHold2DoubleRequired = prefs.isEffectiveHold2DoublePressRequired(app.packageName)
+        var pendingHold2UseHold1Double = prefs.isEffectiveHold2UseHold1DoublePressHold(app.packageName)
+
+        fun effectiveHold2Mode(): HoldMode = pendingHold2ModeOverride ?: prefs.getGlobalHold2Mode()
+
+        fun updateHold1KeyLabel() {
+            val effectiveKey = prefs.getEffectiveHoldKeyCode(app.packageName)
+            val displayKey = pendingHold1KeyOverride ?: effectiveKey
+            val suffix = if (pendingHold1KeyOverride == null) " (global)" else " (override)"
+            tvHold1KeyCode.text = "${formatKeyLabel(displayKey)}$suffix"
+        }
+
+        fun updateHold2KeyLabel() {
+            val enabled = effectiveHold2Mode() != HoldMode.DISABLED
+            val tied = pendingHold2UseHold1Double
+
+            tvHold2KeyCode.alpha = if (enabled) 1f else 0.5f
+            tvHold2KeyCode.text = when {
+                !enabled -> "Disabled"
+                tied -> "Tied to Primary Hold double-press + hold"
+                else -> {
+                    val effectiveKey = prefs.getEffectiveHold2KeyCode(app.packageName)
+                    val displayKey = pendingHold2KeyOverride ?: effectiveKey
+                    val suffix = if (pendingHold2KeyOverride == null) " (global)" else " (override)"
+                    "${formatKeyLabel(displayKey)}$suffix"
+                }
             }
         }
 
-        // ---- Hold keycode override (null = follow global) ----
-        val holdKeyOverride = prefs.getAppHoldKeyCodeOverride(app.packageName) // Int? (null = follow)
-        var pendingHoldKeyOverride: Int? = holdKeyOverride
+        fun updateHold2Ui() {
+            val enabled = effectiveHold2Mode() != HoldMode.DISABLED
+            if (!enabled && pendingHold2UseHold1Double) {
+                pendingHold2UseHold1Double = false
+                checkHold2UseHold1Double.isChecked = false
+            }
 
-        fun updateHoldKeyLabel() {
-            val effectiveKey = prefs.getEffectiveHoldKeyCode(app.packageName)
-            val displayKey = pendingHoldKeyOverride ?: effectiveKey
-            val suffix = if (pendingHoldKeyOverride == null) " (global)" else " (override)"
-            tvHoldKeyCode.text = "${keyCodeLabel(displayKey)}$suffix"
+            checkHold2UseHold1Double.isEnabled = enabled
+            checkHold2UseHold1Double.alpha = if (enabled) 1f else 0.5f
+
+            val tied = pendingHold2UseHold1Double
+
+            btnSetHold2Key.isEnabled = enabled && !tied
+            btnSetHold2Key.alpha = if (btnSetHold2Key.isEnabled) 1f else 0.5f
+
+            val dblEnabled = enabled && !tied
+            checkHold2DoubleRequired.isEnabled = dblEnabled
+            checkHold2DoubleRequired.alpha = if (dblEnabled) 1f else 0.5f
+
+            if (tied) {
+                pendingHold2DoubleRequired = false
+                checkHold2DoubleRequired.isChecked = false
+            }
+
+            checkHold2AllowInText.isEnabled = enabled
+            checkHold2AllowInText.alpha = if (enabled) 1f else 0.5f
+
+            updateHold2KeyLabel()
         }
 
-        updateHoldKeyLabel()
+        // ----- Init UI -----
+        spinnerHold1Mode.setSelection(holdModeOptions.indexOf(hold1ModeOverride).let { if (it >= 0) it else 0 }, false)
+        spinnerHold2Mode.setSelection(holdModeOptions.indexOf(pendingHold2ModeOverride).let { if (it >= 0) it else 0 }, false)
 
-        btnSetHoldKey.setOnClickListener {
+        checkHold1AllowInText.isChecked = pendingHold1AllowInText
+        checkHold1DoubleRequired.isChecked = pendingHold1DoubleRequired
+
+        checkHold2AllowInText.isChecked = pendingHold2AllowInText
+        checkHold2DoubleRequired.isChecked = pendingHold2DoubleRequired
+        checkHold2UseHold1Double.isChecked = pendingHold2UseHold1Double
+
+        updateHold1KeyLabel()
+        updateHold2Ui()
+
+        // ----- Listeners -----
+        spinnerHold1Mode.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                pendingHold1ModeOverride = holdModeOptions[position]
+            }
+        }
+
+        btnSetHold1Key.setOnClickListener {
             val effectiveKey = prefs.getEffectiveHoldKeyCode(app.packageName)
             showKeyCaptureDialog(
+                title = "Set Primary Hold key",
                 currentEffectiveKeyCode = effectiveKey,
                 onKeyCaptured = { keyCodeOrNull ->
-                    pendingHoldKeyOverride = keyCodeOrNull
-                    updateHoldKeyLabel()
+                    pendingHold1KeyOverride = keyCodeOrNull
+                    updateHold1KeyLabel()
                 }
             )
         }
 
-        // ---- Hold allowed in text fields (store override only if differs from global) ----
-        checkHoldAllowedInTextApp.isChecked = prefs.isEffectiveHoldAllowedInTextFields(app.packageName)
+        checkHold1AllowInText.setOnCheckedChangeListener { _, isChecked ->
+            pendingHold1AllowInText = isChecked
+        }
+
+        checkHold1DoubleRequired.setOnCheckedChangeListener { buttonView, isChecked ->
+            if (isChecked && pendingHold2UseHold1Double) {
+                AlertDialog.Builder(context)
+                    .setTitle("Conflict")
+                    .setMessage(
+                        "Secondary Hold is currently set to trigger from Primary Hold double-press + hold.\n\n" +
+                                "Enabling Primary Hold double-press requirement would disable that Secondary Hold option for this app. Continue?"
+                    )
+                    .setPositiveButton("Disable Secondary Hold tie") { d, _ ->
+                        d.dismiss()
+                        pendingHold2UseHold1Double = false
+                        checkHold2UseHold1Double.isChecked = false
+                        pendingHold1DoubleRequired = true
+                        updateHold2Ui()
+                    }
+                    .setNegativeButton("Cancel") { d, _ ->
+                        d.dismiss()
+                        buttonView.isChecked = false
+                    }
+                    .show()
+                return@setOnCheckedChangeListener
+            }
+            pendingHold1DoubleRequired = isChecked
+        }
+
+        checkHold2UseHold1Double.setOnCheckedChangeListener { buttonView, isChecked ->
+            if (isChecked) {
+                if (pendingHold1DoubleRequired) {
+                    AlertDialog.Builder(context)
+                        .setTitle("Conflict")
+                        .setMessage(
+                            "Enabling this will disable “Primary Hold: require double press + hold” for this app to avoid conflicts.\n\nContinue?"
+                        )
+                        .setPositiveButton("Continue") { d, _ ->
+                            d.dismiss()
+                            pendingHold1DoubleRequired = false
+                            checkHold1DoubleRequired.isChecked = false
+                            pendingHold2UseHold1Double = true
+                            pendingHold2DoubleRequired = false
+                            checkHold2DoubleRequired.isChecked = false
+                            updateHold2Ui()
+                        }
+                        .setNegativeButton("Cancel") { d, _ ->
+                            d.dismiss()
+                            buttonView.isChecked = false
+                        }
+                        .show()
+                    return@setOnCheckedChangeListener
+                }
+
+                pendingHold2UseHold1Double = true
+                pendingHold2DoubleRequired = false
+                checkHold2DoubleRequired.isChecked = false
+                updateHold2Ui()
+            } else {
+                pendingHold2UseHold1Double = false
+                updateHold2Ui()
+            }
+        }
+
+        spinnerHold2Mode.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                pendingHold2ModeOverride = holdModeOptions[position]
+                updateHold2Ui()
+            }
+        }
+
+        btnSetHold2Key.setOnClickListener {
+            if (pendingHold2UseHold1Double) {
+                Toast.makeText(context, "Secondary Hold key is tied to Primary Hold double-press + hold.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            val effectiveKey = prefs.getEffectiveHold2KeyCode(app.packageName)
+            showKeyCaptureDialog(
+                title = "Set Secondary Hold key",
+                currentEffectiveKeyCode = effectiveKey,
+                onKeyCaptured = { keyCodeOrNull ->
+                    pendingHold2KeyOverride = keyCodeOrNull
+                    updateHold2Ui()
+                }
+            )
+        }
+
+        checkHold2AllowInText.setOnCheckedChangeListener { _, isChecked ->
+            pendingHold2AllowInText = isChecked
+        }
+
+        checkHold2DoubleRequired.setOnCheckedChangeListener { buttonView, isChecked ->
+            if (pendingHold2UseHold1Double) {
+                buttonView.isChecked = false
+                Toast.makeText(context, "Not applicable while Secondary Hold is tied to Primary Hold double-press.", Toast.LENGTH_SHORT).show()
+                return@setOnCheckedChangeListener
+            }
+            pendingHold2DoubleRequired = isChecked
+        }
 
         val dialog = AlertDialog.Builder(context)
             .setView(dialogView)
             .setPositiveButton("Save") { d, _ ->
-                // Save scroll settings only when effective mode is Scroll Wheel.
                 if (isScrollEffective) {
                     val selSens = sensOptions[spinnerSens.selectedItemPosition]
                     prefs.setAppScrollSensitivity(app.packageName, selSens)
@@ -248,29 +399,40 @@ class AppListAdapter(
                     prefs.setAppScrollInvertHorizontal(app.packageName, checkInvertH.isChecked)
                 }
 
-                // Save per-app auto keyboard override (null = follow global)
                 val desiredAuto = checkAutoKeyboard.isChecked
                 val globalAuto = prefs.isGlobalAutoKeyboardForTextEnabled()
-                if (desiredAuto == globalAuto) {
-                    prefs.setAppAutoKeyboardOverride(app.packageName, null)
-                } else {
-                    prefs.setAppAutoKeyboardOverride(app.packageName, desiredAuto)
-                }
+                prefs.setAppAutoKeyboardOverride(app.packageName, if (desiredAuto == globalAuto) null else desiredAuto)
 
-                // Save hold mode override (null = follow global)
-                prefs.setAppHoldModeOverride(app.packageName, pendingHoldModeOverride)
+                prefs.setAppHoldModeOverride(app.packageName, pendingHold1ModeOverride)
+                prefs.setAppHoldKeyCodeOverride(app.packageName, pendingHold1KeyOverride)
 
-                // Save hold key override (null = follow global)
-                prefs.setAppHoldKeyCodeOverride(app.packageName, pendingHoldKeyOverride)
+                val globalAllow1 = prefs.isGlobalHoldAllowedInTextFields()
+                prefs.setAppHoldAllowedInTextFieldsOverride(app.packageName, if (pendingHold1AllowInText == globalAllow1) null else pendingHold1AllowInText)
 
-                // Save allow-in-text override (null = follow global)
-                val desiredAllow = checkHoldAllowedInTextApp.isChecked
-                val globalAllow = prefs.isGlobalHoldAllowedInTextFields()
-                if (desiredAllow == globalAllow) {
-                    prefs.setAppHoldAllowedInTextFieldsOverride(app.packageName, null)
-                } else {
-                    prefs.setAppHoldAllowedInTextFieldsOverride(app.packageName, desiredAllow)
-                }
+                val globalHold1Double = prefs.isGlobalHoldDoublePressRequired()
+                prefs.setAppHoldDoublePressRequiredOverride(
+                    app.packageName,
+                    if (pendingHold1DoubleRequired == globalHold1Double) null else pendingHold1DoubleRequired
+                )
+
+                prefs.setAppHold2ModeOverride(app.packageName, pendingHold2ModeOverride)
+                prefs.setAppHold2KeyCodeOverride(app.packageName, pendingHold2KeyOverride)
+
+                val globalAllow2 = prefs.isGlobalHold2AllowedInTextFields()
+                prefs.setAppHold2AllowedInTextFieldsOverride(app.packageName, if (pendingHold2AllowInText == globalAllow2) null else pendingHold2AllowInText)
+
+                val globalHold2Double = prefs.isGlobalHold2DoublePressRequired()
+                val finalHold2Double = if (pendingHold2UseHold1Double) false else pendingHold2DoubleRequired
+                prefs.setAppHold2DoublePressRequiredOverride(
+                    app.packageName,
+                    if (finalHold2Double == globalHold2Double) null else finalHold2Double
+                )
+
+                val globalTie = prefs.isGlobalHold2UseHold1DoublePressHold()
+                prefs.setAppHold2UseHold1DoublePressHoldOverride(
+                    app.packageName,
+                    if (pendingHold2UseHold1Double == globalTie) null else pendingHold2UseHold1Double
+                )
 
                 d.dismiss()
             }
@@ -281,26 +443,26 @@ class AppListAdapter(
     }
 
     private fun showKeyCaptureDialog(
+        title: String,
         currentEffectiveKeyCode: Int,
         onKeyCaptured: (Int?) -> Unit
     ) {
-        val message = "Press the key you want to use as the hold modifier.\n\n" +
-                "Current effective: $currentEffectiveKeyCode (${KeyEvent.keyCodeToString(currentEffectiveKeyCode)})"
+        val message = "Press the key you want to use.\n\n" +
+                "Current effective: ${formatKeyLabel(currentEffectiveKeyCode)}"
 
         val dialog = AlertDialog.Builder(context)
-            .setTitle("Set hold key")
+            .setTitle(title)
             .setMessage(message)
             .setNegativeButton("Cancel", null)
             .setNeutralButton("Use global") { d, _ ->
                 d.dismiss()
-                onKeyCaptured(null) // clear override
+                onKeyCaptured(null)
             }
             .create()
 
         dialog.setOnKeyListener { d, keyCode, event ->
             if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
             if (keyCode == KeyEvent.KEYCODE_BACK) return@setOnKeyListener false
-
             onKeyCaptured(keyCode)
             d.dismiss()
             true
@@ -309,9 +471,10 @@ class AppListAdapter(
         dialog.show()
     }
 
-    private fun keyCodeLabel(keyCode: Int): String {
+    private fun formatKeyLabel(keyCode: Int): String {
         val raw = KeyEvent.keyCodeToString(keyCode)
-        return raw.removePrefix("KEYCODE_").replace('_', ' ')
+        val nice = raw.removePrefix("KEYCODE_").replace('_', ' ')
+        return "$nice ($keyCode)"
     }
 
     fun filter(query: String) {

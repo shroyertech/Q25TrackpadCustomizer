@@ -19,36 +19,33 @@
             android:textSize="16sp"
             android:layout_marginBottom="8dp" />
 
-        <!-- HOLD-KEY (PER-APP) -->
+        <!-- PRIMARY HOLD (PER-APP) -->
 
         <TextView
-            android:id="@+id/tvHoldSectionLabel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Hold-key switching"
+            android:text="Primary hold switching"
             android:textStyle="bold"
             android:textSize="14sp"
             android:layout_marginTop="2dp"
             android:layout_marginBottom="4dp" />
 
         <TextView
-            android:id="@+id/tvHoldModeLabel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Hold mode"
+            android:text="Primary Hold mode"
             android:textSize="12sp" />
 
         <Spinner
             android:id="@+id/spinnerAppHoldMode"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp" />
+            android:layout_marginBottom="6dp" />
 
         <TextView
-            android:id="@+id/tvHoldKeyLabel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Hold key"
+            android:text="Primary Hold key"
             android:textSize="12sp" />
 
         <TextView
@@ -65,14 +62,97 @@
             android:id="@+id/btnSetAppHoldKey"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Set hold key"
+            android:text="Set Primary Hold key"
             android:layout_marginBottom="6dp" />
 
         <CheckBox
             android:id="@+id/checkHoldAllowedInTextApp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Allow hold switching in text fields"
+            android:text="Allow Primary Hold switching in text fields"
+            android:textSize="12sp"
+            android:layout_marginBottom="4dp" />
+
+        <CheckBox
+            android:id="@+id/checkAppHoldDoublePressRequired"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Primary Hold: require double press + hold"
+            android:textSize="12sp"
+            android:layout_marginBottom="10dp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="?android:attr/listDivider"
+            android:layout_marginBottom="10dp" />
+
+        <!-- SECONDARY HOLD (PER-APP) -->
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Secondary hold switching"
+            android:textStyle="bold"
+            android:textSize="14sp"
+            android:layout_marginBottom="4dp" />
+
+        <CheckBox
+            android:id="@+id/checkAppHold2UseHold1DoublePressHold"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Secondary Hold is triggered by Primary Hold double-press + hold"
+            android:textSize="12sp"
+            android:layout_marginBottom="6dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Secondary Hold mode"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/spinnerAppHold2Mode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="6dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Secondary Hold key"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/tvAppHold2KeyCode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="SHIFT RIGHT (60)"
+            android:textSize="12sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:layout_marginTop="2dp"
+            android:layout_marginBottom="6dp" />
+
+        <Button
+            android:id="@+id/btnSetAppHold2Key"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Set Secondary Hold key"
+            android:layout_marginBottom="6dp" />
+
+        <CheckBox
+            android:id="@+id/checkHold2AllowedInTextApp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Allow Secondary Hold switching in text fields"
+            android:textSize="12sp"
+            android:layout_marginBottom="4dp" />
+
+        <CheckBox
+            android:id="@+id/checkAppHold2DoublePressRequired"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Secondary Hold: require double press + hold"
             android:textSize="12sp"
             android:layout_marginBottom="10dp" />
 
@@ -85,7 +165,6 @@
         <!-- SCROLL (PER-APP) -->
 
         <TextView
-            android:id="@+id/tvScrollSectionLabel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Scroll wheel settings"

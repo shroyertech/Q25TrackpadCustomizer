@@ -117,7 +117,7 @@ class Prefs(context: Context) {
         return getAppAutoKeyboardOverride(packageName) ?: isGlobalAutoKeyboardForTextEnabled()
     }
 
-    // ---- Hold-key mode switching (global + per-app overrides) ----
+    // ---- Primary hold mode switching (global + per-app overrides) ----
 
     fun getGlobalHoldMode(): HoldMode {
         val value = prefs.getInt(KEY_HOLD_MODE_GLOBAL, HoldMode.DISABLED.prefValue)
@@ -203,6 +203,210 @@ class Prefs(context: Context) {
 
     fun isEffectiveHoldAllowedInTextFields(packageName: String?): Boolean {
         return getAppHoldAllowedInTextFieldsOverride(packageName) ?: isGlobalHoldAllowedInTextFields()
+    }
+
+    // ---- Primary hold: require double-press + hold (global + per-app) ----
+
+    fun isGlobalHoldDoublePressRequired(): Boolean {
+        return prefs.getBoolean(KEY_HOLD_DOUBLE_PRESS_GLOBAL, false)
+    }
+
+    fun setGlobalHoldDoublePressRequired(required: Boolean) {
+        prefs.edit().putBoolean(KEY_HOLD_DOUBLE_PRESS_GLOBAL, required).apply()
+    }
+
+    /**
+     * Per-app override for Primary Hold double-press requirement.
+     * - true  => require double-press + hold
+     * - false => single press + hold
+     * - null  => follow global
+     */
+    fun getAppHoldDoublePressRequiredOverride(packageName: String?): Boolean? {
+        if (packageName.isNullOrEmpty()) return null
+        val key = keyHoldDoublePressPkg(packageName)
+        return if (prefs.contains(key)) prefs.getBoolean(key, false) else null
+    }
+
+    fun setAppHoldDoublePressRequiredOverride(packageName: String, override: Boolean?) {
+        val key = keyHoldDoublePressPkg(packageName)
+        prefs.edit().apply {
+            if (override == null) remove(key)
+            else putBoolean(key, override)
+        }.apply()
+    }
+
+    fun isEffectiveHoldDoublePressRequired(packageName: String?): Boolean {
+        return getAppHoldDoublePressRequiredOverride(packageName) ?: isGlobalHoldDoublePressRequired()
+    }
+
+    // ---- Secondary hold mode switching (global + per-app overrides) ----
+
+    fun getGlobalHold2Mode(): HoldMode {
+        val value = prefs.getInt(KEY_HOLD2_MODE_GLOBAL, HoldMode.DISABLED.prefValue)
+        return HoldMode.fromPrefValue(value)
+    }
+
+    fun setGlobalHold2Mode(mode: HoldMode) {
+        prefs.edit().putInt(KEY_HOLD2_MODE_GLOBAL, mode.prefValue).apply()
+    }
+
+    fun getGlobalHold2KeyCode(): Int {
+        return prefs.getInt(KEY_HOLD2_KEYCODE_GLOBAL, DEFAULT_HOLD2_KEYCODE)
+    }
+
+    fun setGlobalHold2KeyCode(keyCode: Int) {
+        prefs.edit().putInt(KEY_HOLD2_KEYCODE_GLOBAL, keyCode).apply()
+    }
+
+    fun isGlobalHold2AllowedInTextFields(): Boolean {
+        return prefs.getBoolean(KEY_HOLD2_ALLOW_IN_TEXT_GLOBAL, false)
+    }
+
+    fun setGlobalHold2AllowedInTextFields(allowed: Boolean) {
+        prefs.edit().putBoolean(KEY_HOLD2_ALLOW_IN_TEXT_GLOBAL, allowed).apply()
+    }
+
+    fun getAppHold2ModeOverride(packageName: String?): HoldMode? {
+        if (packageName.isNullOrEmpty()) return null
+        val key = keyHold2ModePkg(packageName)
+        if (!prefs.contains(key)) return null
+        return HoldMode.fromPrefValue(prefs.getInt(key, HoldMode.DISABLED.prefValue))
+    }
+
+    fun setAppHold2ModeOverride(packageName: String, override: HoldMode?) {
+        val key = keyHold2ModePkg(packageName)
+        prefs.edit().apply {
+            if (override == null) remove(key)
+            else putInt(key, override.prefValue)
+        }.apply()
+    }
+
+    fun getEffectiveHold2Mode(packageName: String?): HoldMode {
+        return getAppHold2ModeOverride(packageName) ?: getGlobalHold2Mode()
+    }
+
+    fun getAppHold2KeyCodeOverride(packageName: String?): Int? {
+        if (packageName.isNullOrEmpty()) return null
+        val key = keyHold2KeyCodePkg(packageName)
+        return if (prefs.contains(key)) prefs.getInt(key, DEFAULT_HOLD2_KEYCODE) else null
+    }
+
+    fun setAppHold2KeyCodeOverride(packageName: String, overrideKeyCode: Int?) {
+        val key = keyHold2KeyCodePkg(packageName)
+        prefs.edit().apply {
+            if (overrideKeyCode == null) remove(key)
+            else putInt(key, overrideKeyCode)
+        }.apply()
+    }
+
+    fun getEffectiveHold2KeyCode(packageName: String?): Int {
+        return getAppHold2KeyCodeOverride(packageName) ?: getGlobalHold2KeyCode()
+    }
+
+    /**
+     * Per-app override for allowing Secondary Hold switching inside text fields.
+     * - true  => allow
+     * - false => disallow
+     * - null  => follow global
+     */
+    fun getAppHold2AllowedInTextFieldsOverride(packageName: String?): Boolean? {
+        if (packageName.isNullOrEmpty()) return null
+        val key = keyHold2AllowInTextPkg(packageName)
+        return if (prefs.contains(key)) prefs.getBoolean(key, false) else null
+    }
+
+    fun setAppHold2AllowedInTextFieldsOverride(packageName: String, override: Boolean?) {
+        val key = keyHold2AllowInTextPkg(packageName)
+        prefs.edit().apply {
+            if (override == null) remove(key)
+            else putBoolean(key, override)
+        }.apply()
+    }
+
+    fun isEffectiveHold2AllowedInTextFields(packageName: String?): Boolean {
+        return getAppHold2AllowedInTextFieldsOverride(packageName) ?: isGlobalHold2AllowedInTextFields()
+    }
+
+    // ---- Secondary hold: require double-press + hold (global + per-app) ----
+    // Only meaningful when Secondary Hold is using its own keycode (not tied to Primary Hold's double-press gesture).
+
+    fun isGlobalHold2DoublePressRequired(): Boolean {
+        return prefs.getBoolean(KEY_HOLD2_DOUBLE_PRESS_GLOBAL, false)
+    }
+
+    fun setGlobalHold2DoublePressRequired(required: Boolean) {
+        prefs.edit().putBoolean(KEY_HOLD2_DOUBLE_PRESS_GLOBAL, required).apply()
+    }
+
+    /**
+     * Per-app override for Secondary Hold double-press requirement.
+     * - true  => require double-press + hold
+     * - false => single press + hold
+     * - null  => follow global
+     */
+    fun getAppHold2DoublePressRequiredOverride(packageName: String?): Boolean? {
+        if (packageName.isNullOrEmpty()) return null
+        val key = keyHold2DoublePressPkg(packageName)
+        return if (prefs.contains(key)) prefs.getBoolean(key, false) else null
+    }
+
+    fun setAppHold2DoublePressRequiredOverride(packageName: String, override: Boolean?) {
+        val key = keyHold2DoublePressPkg(packageName)
+        prefs.edit().apply {
+            if (override == null) remove(key)
+            else putBoolean(key, override)
+        }.apply()
+    }
+
+    fun isEffectiveHold2DoublePressRequired(packageName: String?): Boolean {
+        return getAppHold2DoublePressRequiredOverride(packageName) ?: isGlobalHold2DoublePressRequired()
+    }
+
+    // ---- Secondary hold: "Use Primary Hold double-press + hold" trigger (global + per-app) ----
+
+    fun isGlobalHold2UseHold1DoublePressHold(): Boolean {
+        return prefs.getBoolean(KEY_HOLD2_USE_HOLD1_DOUBLE_GLOBAL, false)
+    }
+
+    fun setGlobalHold2UseHold1DoublePressHold(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_HOLD2_USE_HOLD1_DOUBLE_GLOBAL, enabled).apply()
+    }
+
+    /**
+     * Per-app override for Secondary Hold using Primary Hold's double-press+hold gesture.
+     * - true  => Secondary Hold is triggered by Primary Hold double-press+hold
+     * - false => Secondary Hold uses its own keycode
+     * - null  => follow global
+     */
+    fun getAppHold2UseHold1DoublePressHoldOverride(packageName: String?): Boolean? {
+        if (packageName.isNullOrEmpty()) return null
+        val key = keyHold2UseHold1DoublePkg(packageName)
+        return if (prefs.contains(key)) prefs.getBoolean(key, false) else null
+    }
+
+    fun setAppHold2UseHold1DoublePressHoldOverride(packageName: String, override: Boolean?) {
+        val key = keyHold2UseHold1DoublePkg(packageName)
+        prefs.edit().apply {
+            if (override == null) remove(key)
+            else putBoolean(key, override)
+        }.apply()
+    }
+
+    fun isEffectiveHold2UseHold1DoublePressHold(packageName: String?): Boolean {
+        return getAppHold2UseHold1DoublePressHoldOverride(packageName) ?: isGlobalHold2UseHold1DoublePressHold()
+    }
+
+    /**
+     * Convenience helper: what physical keycode should AppSwitchService watch to initiate Secondary Hold?
+     * - If Secondary Hold is tied to Primary Hold double-press+hold => return Primary Hold keycode (effective)
+     * - Else => return Secondary Hold keycode (effective)
+     */
+    fun getEffectiveHold2TriggerKeyCode(packageName: String?): Int {
+        return if (isEffectiveHold2UseHold1DoublePressHold(packageName)) {
+            getEffectiveHoldKeyCode(packageName) // Primary Hold key
+        } else {
+            getEffectiveHold2KeyCode(packageName) // Secondary Hold key
+        }
     }
 
     // ---- Theme ----
@@ -360,6 +564,7 @@ class Prefs(context: Context) {
         private const val KEY_AUTO_KEYBOARD_FOR_TEXT_GLOBAL = "auto_keyboard_for_text"
         private fun keyAutoKeyboardForTextPkg(pkg: String) = "auto_keyboard_for_text_pkg_$pkg"
 
+        // Primary Hold
         private const val KEY_HOLD_MODE_GLOBAL = "hold_mode_global"
         private const val KEY_HOLD_KEYCODE_GLOBAL = "hold_keycode_global"
         private const val KEY_HOLD_ALLOW_IN_TEXT_GLOBAL = "hold_allow_in_text_global"
@@ -367,6 +572,27 @@ class Prefs(context: Context) {
         private fun keyHoldModePkg(pkg: String) = "hold_mode_pkg_$pkg"
         private fun keyHoldKeyCodePkg(pkg: String) = "hold_keycode_pkg_$pkg"
         private fun keyHoldAllowInTextPkg(pkg: String) = "hold_allow_in_text_pkg_$pkg"
+
+        // Primary Hold double-press requirement
+        private const val KEY_HOLD_DOUBLE_PRESS_GLOBAL = "hold_double_press_global"
+        private fun keyHoldDoublePressPkg(pkg: String) = "hold_double_press_pkg_$pkg"
+
+        // Secondary Hold
+        private const val KEY_HOLD2_MODE_GLOBAL = "hold2_mode_global"
+        private const val KEY_HOLD2_KEYCODE_GLOBAL = "hold2_keycode_global"
+        private const val KEY_HOLD2_ALLOW_IN_TEXT_GLOBAL = "hold2_allow_in_text_global"
+
+        private fun keyHold2ModePkg(pkg: String) = "hold2_mode_pkg_$pkg"
+        private fun keyHold2KeyCodePkg(pkg: String) = "hold2_keycode_pkg_$pkg"
+        private fun keyHold2AllowInTextPkg(pkg: String) = "hold2_allow_in_text_pkg_$pkg"
+
+        // Secondary Hold double-press requirement
+        private const val KEY_HOLD2_DOUBLE_PRESS_GLOBAL = "hold2_double_press_global"
+        private fun keyHold2DoublePressPkg(pkg: String) = "hold2_double_press_pkg_$pkg"
+
+        // Secondary Hold uses Primary Hold double-press+hold gesture
+        private const val KEY_HOLD2_USE_HOLD1_DOUBLE_GLOBAL = "hold2_use_hold1_double_global"
+        private fun keyHold2UseHold1DoublePkg(pkg: String) = "hold2_use_hold1_double_pkg_$pkg"
 
         private const val KEY_THEME_PREF = "theme_pref"
         private const val KEY_EXCLUDED_PACKAGES = "excluded_packages"
@@ -383,6 +609,7 @@ class Prefs(context: Context) {
         private fun keyScrollAppInvH(pkg: String) = "scroll_app_inv_h_$pkg"
 
         const val DEFAULT_HOLD_KEYCODE = 59 // KEYCODE_SHIFT_LEFT
+        const val DEFAULT_HOLD2_KEYCODE = 60 // KEYCODE_SHIFT_RIGHT
 
         val DEFAULT_EXCLUDED_PACKAGES: Set<String> = setOf(
             // Q25 / custom keyboards

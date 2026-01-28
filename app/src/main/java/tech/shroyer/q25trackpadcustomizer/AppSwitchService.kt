@@ -11,10 +11,17 @@ import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.inputmethod.InputMethodManager
+import java.io.IOException
+import java.util.concurrent.Executors
 
 /**
  * Tracks foreground app changes and key events, applying trackpad mode and scroll behavior.
  * Supports temporary Keyboard override while editing text, plus hold-key temporary switching.
+ *
+ * Updated:
+ *  - Secondary Hold support (separate mode/key/allow-in-text/double-press).
+ *  - Optional "require double press + hold" for Primary Hold and Secondary Hold.
+ *  - Optional "Secondary Hold is triggered by Primary Hold double-press + hold".
  */
 class AppSwitchService : AccessibilityService() {
 
@@ -25,10 +32,8 @@ class AppSwitchService : AccessibilityService() {
 
     private var imePackages: Set<String> = emptySet()
 
-    // Helps avoid false negatives when focus briefly changes during IME transitions.
     private var lastTextInteractionUptime: Long = 0L
 
-    // Debounced “content changed” checker (avoid heavy scans for every event)
     private val contentCheckHandler = Handler(Looper.getMainLooper())
     private var contentCheckScheduled = false
     private val contentCheckRunnable = Runnable {
@@ -36,7 +41,6 @@ class AppSwitchService : AccessibilityService() {
         handleContentChangedCheck()
     }
 
-    // Text-input override monitoring
     private val textOverrideHandler = Handler(Looper.getMainLooper())
     private var textOverrideMisses = 0
     private val textOverrideCheckRunnable = object : Runnable {
@@ -53,7 +57,6 @@ class AppSwitchService : AccessibilityService() {
                 return
             }
 
-            // Grace window: some apps briefly drop focus/structure during IME transitions.
             val recent = (SystemClock.uptimeMillis() - lastTextInteractionUptime) < 1200L
             val stillEditing = hasFocusedTextInput() || recent
 
@@ -72,6 +75,27 @@ class AppSwitchService : AccessibilityService() {
         }
     }
 
+    // ---------- HOLD RUNTIME STATE ----------
+
+    private val holdHandler = Handler(Looper.getMainLooper())
+
+    private data class HoldRuntimeState(
+        val id: Int,
+        var active: Boolean = false,
+        var keyDown: Int? = null,
+        var targetMode: Mode? = null,
+        var waitingSecondPress: Boolean = false,
+        var lastUpUptime: Long = 0L,
+        var pendingSingleHoldRunnable: Runnable? = null
+    )
+
+    private val hold1 = HoldRuntimeState(id = 1)
+    private val hold2 = HoldRuntimeState(id = 2)
+
+    private var lastActivatedHoldSlot: Int = 0
+
+    private val keyInjectExec = Executors.newSingleThreadExecutor()
+
     override fun onCreate() {
         super.onCreate()
         prefs = Prefs(this)
@@ -85,6 +109,8 @@ class AppSwitchService : AccessibilityService() {
     override fun onDestroy() {
         stopTextOverrideMonitor()
         contentCheckHandler.removeCallbacks(contentCheckRunnable)
+        cancelHoldPendingRunnables()
+        keyInjectExec.shutdownNow()
         super.onDestroy()
     }
 
@@ -95,7 +121,6 @@ class AppSwitchService : AccessibilityService() {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 val pkg = event.packageName?.toString() ?: return
 
-                // IME windows indicate likely active text input in the current foreground app.
                 if (isImePackage(pkg)) {
                     lastTextInteractionUptime = SystemClock.uptimeMillis()
                     val fg = AppState.currentForegroundPackage
@@ -106,7 +131,6 @@ class AppSwitchService : AccessibilityService() {
                 }
 
                 handleForegroundAppChanged(pkg)
-                // Some apps don’t emit nice focused events; content check helps.
                 scheduleContentCheck()
             }
 
@@ -136,14 +160,10 @@ class AppSwitchService : AccessibilityService() {
     override fun onKeyEvent(event: KeyEvent): Boolean {
         val fg = AppState.currentForegroundPackage
 
-        // Hold-key switching (never consumes the key).
-        val holdKeyCode = prefs.getEffectiveHoldKeyCode(fg)
-        if (event.keyCode == holdKeyCode) {
-            handleHoldKeyEvent(event)
+        if (handleHoldKeyEvents(event, fg)) {
             return false
         }
 
-        // Back/Enter can help detect the end of text editing.
         if (event.action == KeyEvent.ACTION_UP &&
             (event.keyCode == KeyEvent.KEYCODE_BACK ||
                     event.keyCode == KeyEvent.KEYCODE_ENTER ||
@@ -153,7 +173,13 @@ class AppSwitchService : AccessibilityService() {
             return false
         }
 
-        // Scroll wheel mode key transformation.
+        if (shouldRemapMetaDpadToPlain(event)) {
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                injectPlainDpad(event.keyCode)
+            }
+            return true
+        }
+
         if (AppState.currentMode != Mode.SCROLL_WHEEL) return false
 
         return when (event.keyCode) {
@@ -167,6 +193,47 @@ class AppSwitchService : AccessibilityService() {
                 true
             }
             else -> false
+        }
+    }
+
+    private fun shouldRemapMetaDpadToPlain(event: KeyEvent): Boolean {
+        if (!isAnyHoldActive()) return false
+        if (AppState.currentMode != Mode.KEYBOARD) return false
+
+        val isDpad = when (event.keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP,
+            KeyEvent.KEYCODE_DPAD_DOWN,
+            KeyEvent.KEYCODE_DPAD_LEFT,
+            KeyEvent.KEYCODE_DPAD_RIGHT -> true
+            else -> false
+        }
+        if (!isDpad) return false
+
+        return event.isShiftPressed || event.isAltPressed || event.isCtrlPressed || event.isMetaPressed
+    }
+
+    private fun injectPlainDpad(keyCode: Int) {
+        keyInjectExec.execute {
+            execSu("input keyevent $keyCode")
+        }
+    }
+
+    private fun execSu(cmd: String): Boolean {
+        return try {
+            val p = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
+            try {
+                p.inputStream.bufferedReader().readText()
+            } catch (_: Exception) {
+            }
+            try {
+                p.errorStream.bufferedReader().readText()
+            } catch (_: Exception) {
+            }
+            p.waitFor() == 0
+        } catch (_: IOException) {
+            false
+        } catch (_: InterruptedException) {
+            false
         }
     }
 
@@ -217,7 +284,6 @@ class AppSwitchService : AccessibilityService() {
         if (pkg.isNullOrEmpty()) return false
         if (imePackages.contains(pkg)) return true
 
-        // Heuristic fallback: common keyboard naming patterns
         if (pkg.contains("inputmethod", ignoreCase = true)) return true
         if (pkg.contains("keyboard", ignoreCase = true)) return true
         if (pkg.contains("ime", ignoreCase = true)) return true
@@ -247,7 +313,6 @@ class AppSwitchService : AccessibilityService() {
         if (isText) {
             enterTextInputOverrideIfNeeded()
         } else {
-            // Some apps don’t provide a reliable source; follow up with a debounced check.
             scheduleContentCheck()
         }
     }
@@ -262,7 +327,6 @@ class AppSwitchService : AccessibilityService() {
     private fun handleContentChangedCheck() {
         val fg = AppState.currentForegroundPackage
 
-        // If disabled/excluded while override is active, exit override cleanly.
         if (!isAutoKeyboardEnabledForPackage(fg) || (fg != null && prefs.getExcludedPackages().contains(fg))) {
             if (AppState.textInputOverrideActive) {
                 restoreModeAfterTextInput()
@@ -271,11 +335,9 @@ class AppSwitchService : AccessibilityService() {
             return
         }
 
-        // If we can confirm a focused text input, ensure we’re in keyboard override.
         if (hasFocusedTextInput()) {
             enterTextInputOverrideIfNeeded()
         }
-        // If not, do nothing here — the override monitor will back out after misses.
     }
 
     private fun handleViewFocusedForAutoKeyboard(event: AccessibilityEvent) {
@@ -311,7 +373,6 @@ class AppSwitchService : AccessibilityService() {
         if (cls.contains("AutoCompleteTextView", ignoreCase = true)) return true
         if (node.isEditable) return true
 
-        // Some custom inputs aren’t marked editable but do support SET_TEXT.
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 if (node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_SET_TEXT }) return true
@@ -328,9 +389,9 @@ class AppSwitchService : AccessibilityService() {
         val fg = AppState.currentForegroundPackage
         if (fg != null && prefs.getExcludedPackages().contains(fg)) return
 
-        val prevMode = if (AppState.holdKeyActive) {
-            // If hold-key is active, the current mode may be the temporary hold target.
-            // Restore to the real base mode after text input ends.
+        val anyHoldActive = isAnyHoldActive()
+
+        val prevMode = if (anyHoldActive) {
             AppState.modeBeforeHoldKey
                 ?: AppState.currentMode
                 ?: prefs.getLastKnownMode()
@@ -344,6 +405,21 @@ class AppSwitchService : AccessibilityService() {
         AppState.modeBeforeTextInput = prevMode
 
         if (prevMode == Mode.KEYBOARD) {
+            val desiredProc = procValueForMode(Mode.KEYBOARD)
+            val currentProc = if (desiredProc != null) TrackpadController.readValue() else null
+            if (desiredProc != null && currentProc != null && currentProc != desiredProc) {
+                val ok = TrackpadController.setModeValue(Mode.KEYBOARD)
+                if (!ok) {
+                    showRootError()
+                    AppState.modeBeforeTextInput = null
+                    AppState.textInputOverrideActive = false
+                    stopTextOverrideMonitor()
+                    return
+                }
+                NotificationHelper.clearRootError(this)
+                AppState.currentMode = Mode.KEYBOARD
+            }
+
             AppState.textInputOverrideActive = true
             startTextOverrideMonitor()
             return
@@ -368,15 +444,17 @@ class AppSwitchService : AccessibilityService() {
         val fg = AppState.currentForegroundPackage
         val targetMode = AppState.modeBeforeTextInput ?: getEffectiveModeForPackage(fg)
 
-        // IMEs can swallow modifier KEY_UP events (Shift, etc), leaving hold mode "stuck".
-        // When text input ends, force-clear hold state so we can return to the app/base mode.
-        if (AppState.holdKeyActive) {
-            AppState.holdKeyActive = false
-            AppState.holdKeyCodeDown = null
-            AppState.modeBeforeHoldKey = null
+        if (isAnyHoldActive()) {
+            clearAllHoldState()
         }
 
-        if (AppState.currentMode != targetMode) {
+        val desiredProc = procValueForMode(targetMode)
+        val currentProc = if (desiredProc != null) TrackpadController.readValue() else null
+
+        val alreadyCorrect = (AppState.currentMode == targetMode) &&
+                (desiredProc == null || currentProc == null || currentProc == desiredProc)
+
+        if (!alreadyCorrect) {
             val ok = TrackpadController.setModeValue(targetMode)
             if (!ok) {
                 showRootError()
@@ -416,7 +494,6 @@ class AppSwitchService : AccessibilityService() {
     private fun hasFocusedTextInput(): Boolean {
         val root = rootInActiveWindow ?: return false
 
-        // Fast path: input focus (best signal when available)
         val focused = try {
             root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
         } catch (_: Exception) {
@@ -430,7 +507,6 @@ class AppSwitchService : AccessibilityService() {
             return res
         }
 
-        // Fallback: BFS scan for focused editable/text-like nodes
         val queue: ArrayDeque<AccessibilityNodeInfo> = ArrayDeque()
         queue.add(root)
 
@@ -460,77 +536,382 @@ class AppSwitchService : AccessibilityService() {
         }
     }
 
-    // ---------- HOLD-KEY MODE SWITCHING ----------
+    // ---------- HOLD-KEY MODE SWITCHING (PRIMARY Hold + SECONDARY Hold) ----------
 
-    private fun handleHoldKeyEvent(event: KeyEvent) {
-        val fg = AppState.currentForegroundPackage
+    private fun handleHoldKeyEvents(event: KeyEvent, fg: String?): Boolean {
+        val now = SystemClock.uptimeMillis()
 
-        val holdMode = prefs.getEffectiveHoldMode(fg)
+        val hold1KeyCode = prefs.getEffectiveHoldKeyCode(fg)
+
+        val hold2Mode = prefs.getEffectiveHold2Mode(fg)
+        val hold2UseHold1Double = prefs.isEffectiveHold2UseHold1DoublePressHold(fg)
+
+        val tieHold2ToHold1Double = hold2UseHold1Double && hold2Mode != HoldMode.DISABLED
+
+        val hold2KeyCode = if (tieHold2ToHold1Double) hold1KeyCode else prefs.getEffectiveHold2KeyCode(fg)
+
+        val matchesHold1Key = (event.keyCode == hold1KeyCode)
+        val matchesHold2Key = (!tieHold2ToHold1Double && event.keyCode == hold2KeyCode)
+
+        if (!matchesHold1Key && !matchesHold2Key) return false
+
+        if (!tieHold2ToHold1Double && hold1KeyCode == hold2KeyCode && matchesHold1Key) {
+            handleHoldSingleHandler(
+                event = event,
+                fg = fg,
+                state = hold1,
+                holdMode = prefs.getEffectiveHoldMode(fg),
+                allowInText = prefs.isEffectiveHoldAllowedInTextFields(fg),
+                requireDouble = prefs.isEffectiveHoldDoublePressRequired(fg),
+                toastPrefix = "Primary Hold"
+            )
+            return true
+        }
+
+        if (tieHold2ToHold1Double && matchesHold1Key) {
+            handleHold1KeyWithHold2DoubleGesture(event, fg, now, hold1KeyCode)
+            return true
+        }
+
+        if (matchesHold1Key) {
+            handleHoldSingleHandler(
+                event = event,
+                fg = fg,
+                state = hold1,
+                holdMode = prefs.getEffectiveHoldMode(fg),
+                allowInText = prefs.isEffectiveHoldAllowedInTextFields(fg),
+                requireDouble = prefs.isEffectiveHoldDoublePressRequired(fg),
+                toastPrefix = "Primary Hold"
+            )
+            return true
+        }
+
+        if (matchesHold2Key) {
+            handleHoldSingleHandler(
+                event = event,
+                fg = fg,
+                state = hold2,
+                holdMode = hold2Mode,
+                allowInText = prefs.isEffectiveHold2AllowedInTextFields(fg),
+                requireDouble = prefs.isEffectiveHold2DoublePressRequired(fg),
+                toastPrefix = "Secondary Hold"
+            )
+            return true
+        }
+
+        return false
+    }
+
+    private fun handleHoldSingleHandler(
+        event: KeyEvent,
+        fg: String?,
+        state: HoldRuntimeState,
+        holdMode: HoldMode,
+        allowInText: Boolean,
+        requireDouble: Boolean,
+        toastPrefix: String
+    ) {
         if (holdMode == HoldMode.DISABLED) return
-
-        val allowInText = prefs.isEffectiveHoldAllowedInTextFields(fg)
         if (!allowInText && hasFocusedTextInput()) return
+
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount > 0) return
+
+        val now = SystemClock.uptimeMillis()
 
         when (event.action) {
             KeyEvent.ACTION_DOWN -> {
-                if (AppState.holdKeyActive && AppState.holdKeyCodeDown == event.keyCode) return
+                if (state.active && state.keyDown == event.keyCode) return
 
-                val baseMode =
-                    AppState.currentMode
-                        ?: prefs.getLastKnownMode()
-                        ?: getEffectiveModeForPackage(fg)
-
-                val target = computeHoldTargetMode(baseMode, holdMode) ?: return
-
-                AppState.modeBeforeHoldKey = baseMode
-                AppState.holdKeyActive = true
-                AppState.holdKeyCodeDown = event.keyCode
-
-                if (AppState.currentMode == target) return
-
-                val ok = TrackpadController.setModeValue(target)
-                if (!ok) {
-                    showRootError()
-                    AppState.holdKeyActive = false
-                    AppState.holdKeyCodeDown = null
-                    AppState.modeBeforeHoldKey = null
-                    return
-                }
-
-                NotificationHelper.clearRootError(this)
-                AppState.currentMode = target
-
-                if (prefs.isToastHoldKeyEnabled()) {
-                    ToastHelper.show(this, "Hold: ${modeLabel(target)}")
+                if (requireDouble) {
+                    val within = state.waitingSecondPress && (now - state.lastUpUptime) <= DOUBLE_PRESS_TIMEOUT_MS
+                    if (within) {
+                        state.waitingSecondPress = false
+                        startHold(state, fg, event.keyCode, holdMode, toastPrefix)
+                    } else {
+                        state.keyDown = event.keyCode
+                        state.waitingSecondPress = false
+                        state.lastUpUptime = 0L
+                        syncHoldStateToAppState()
+                    }
+                } else {
+                    startHold(state, fg, event.keyCode, holdMode, toastPrefix)
                 }
             }
 
             KeyEvent.ACTION_UP -> {
-                if (!AppState.holdKeyActive || AppState.holdKeyCodeDown != event.keyCode) return
-
-                AppState.holdKeyActive = false
-                AppState.holdKeyCodeDown = null
-
-                val target = if (AppState.textInputOverrideActive) {
-                    Mode.KEYBOARD
-                } else {
-                    AppState.modeBeforeHoldKey ?: getEffectiveModeForPackage(fg)
-                }
-
-                AppState.modeBeforeHoldKey = null
-
-                if (AppState.currentMode == target) return
-
-                val ok = TrackpadController.setModeValue(target)
-                if (!ok) {
-                    showRootError()
+                if (state.active && state.keyDown == event.keyCode) {
+                    endHold(state, fg)
                     return
                 }
 
-                NotificationHelper.clearRootError(this)
-                AppState.currentMode = target
+                if (requireDouble && state.keyDown == event.keyCode) {
+                    state.keyDown = null
+                    state.waitingSecondPress = true
+                    state.lastUpUptime = now
+                    syncHoldStateToAppState()
+                }
             }
         }
+    }
+
+    private fun handleHold1KeyWithHold2DoubleGesture(event: KeyEvent, fg: String?, now: Long, hold1KeyCode: Int) {
+        val hold1Mode = prefs.getEffectiveHoldMode(fg)
+        val hold2Mode = prefs.getEffectiveHold2Mode(fg)
+
+        val hold1AllowInText = prefs.isEffectiveHoldAllowedInTextFields(fg)
+        val hold2AllowInText = prefs.isEffectiveHold2AllowedInTextFields(fg)
+
+        val canRunHold1 = hold1Mode != HoldMode.DISABLED
+        val canRunHold2 = hold2Mode != HoldMode.DISABLED
+
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount > 0) return
+
+        when (event.action) {
+            KeyEvent.ACTION_DOWN -> {
+                if (canRunHold2) {
+                    val within = hold2.waitingSecondPress && (now - hold2.lastUpUptime) <= DOUBLE_PRESS_TIMEOUT_MS
+                    if (within) {
+                        hold2.waitingSecondPress = false
+                        cancelPendingSingleHold(hold1)
+
+                        if (!hold2AllowInText && hasFocusedTextInput()) return
+                        startHold(hold2, fg, hold1KeyCode, hold2Mode, "Secondary Hold")
+                        return
+                    }
+                }
+
+                if (canRunHold1) {
+                    if (!hold1AllowInText && hasFocusedTextInput()) return
+                    scheduleDelayedSingleHold1Start(fg, hold1KeyCode, hold1Mode)
+                    hold1.keyDown = hold1KeyCode
+                    syncHoldStateToAppState()
+                }
+            }
+
+            KeyEvent.ACTION_UP -> {
+                if (hold2.active && hold2.keyDown == hold1KeyCode) {
+                    endHold(hold2, fg)
+                    return
+                }
+
+                val hold1WasActive = hold1.active && hold1.keyDown == hold1KeyCode
+                cancelPendingSingleHold(hold1)
+
+                if (hold1WasActive) {
+                    endHold(hold1, fg)
+                    return
+                }
+
+                if (canRunHold2) {
+                    hold2.waitingSecondPress = true
+                    hold2.lastUpUptime = now
+                }
+
+                hold1.keyDown = null
+                syncHoldStateToAppState()
+            }
+        }
+    }
+
+    private fun scheduleDelayedSingleHold1Start(fg: String?, keyCode: Int, holdMode: HoldMode) {
+        cancelPendingSingleHold(hold1)
+
+        val r = Runnable {
+            if (hold1.active) return@Runnable
+            if (hold2.active) return@Runnable
+            if (hold1.keyDown != keyCode) return@Runnable
+            startHold(hold1, fg, keyCode, holdMode, "Primary Hold")
+        }
+
+        hold1.pendingSingleHoldRunnable = r
+        holdHandler.postDelayed(r, SINGLE_HOLD_ACTIVATE_DELAY_MS)
+    }
+
+    private fun cancelPendingSingleHold(state: HoldRuntimeState) {
+        state.pendingSingleHoldRunnable?.let { holdHandler.removeCallbacks(it) }
+        state.pendingSingleHoldRunnable = null
+    }
+
+    private fun cancelHoldPendingRunnables() {
+        cancelPendingSingleHold(hold1)
+        cancelPendingSingleHold(hold2)
+    }
+
+    private fun isAnyHoldActive(): Boolean {
+        return hold1.active || hold2.active
+    }
+
+    private fun clearAllHoldState() {
+        hold1.active = false
+        hold1.keyDown = null
+        hold1.targetMode = null
+        hold1.waitingSecondPress = false
+        hold1.lastUpUptime = 0L
+        cancelPendingSingleHold(hold1)
+
+        hold2.active = false
+        hold2.keyDown = null
+        hold2.targetMode = null
+        hold2.waitingSecondPress = false
+        hold2.lastUpUptime = 0L
+        cancelPendingSingleHold(hold2)
+
+        AppState.activeHoldSlot = 0
+        AppState.hold1Active = false
+        AppState.hold1KeyCodeDown = null
+        AppState.modeBeforeHold1 = null
+        AppState.hold2Active = false
+        AppState.hold2KeyCodeDown = null
+        AppState.modeBeforeHold2 = null
+        AppState.hold1DoublePressWaiting = false
+        AppState.hold1FirstTapUpUptime = 0L
+        AppState.hold2DoublePressWaiting = false
+        AppState.hold2FirstTapUpUptime = 0L
+    }
+
+    private fun syncHoldStateToAppState() {
+        AppState.activeHoldSlot = when {
+            hold1.active && hold2.active -> lastActivatedHoldSlot.coerceIn(1, 2)
+            hold2.active -> 2
+            hold1.active -> 1
+            else -> 0
+        }
+
+        AppState.hold1Active = hold1.active
+        AppState.hold1KeyCodeDown = hold1.keyDown
+        AppState.hold2Active = hold2.active
+        AppState.hold2KeyCodeDown = hold2.keyDown
+
+        AppState.hold1DoublePressWaiting = hold1.waitingSecondPress
+        AppState.hold1FirstTapUpUptime = hold1.lastUpUptime
+        AppState.hold2DoublePressWaiting = hold2.waitingSecondPress
+        AppState.hold2FirstTapUpUptime = hold2.lastUpUptime
+    }
+
+    private fun procValueForMode(mode: Mode): String? {
+        return when (mode) {
+            Mode.MOUSE -> "0"
+            Mode.KEYBOARD, Mode.SCROLL_WHEEL -> "1"
+            Mode.FOLLOW_SYSTEM -> null
+        }
+    }
+
+    private fun startHold(state: HoldRuntimeState, fg: String?, keyCode: Int, holdMode: HoldMode, toastPrefix: String) {
+        val baseMode =
+            AppState.currentMode
+                ?: prefs.getLastKnownMode()
+                ?: getEffectiveModeForPackage(fg)
+
+        val target = computeHoldTargetMode(baseMode, holdMode) ?: return
+
+        val hadAnyHoldBefore = (hold1.active || hold2.active)
+        if (!hadAnyHoldBefore) {
+            AppState.modeBeforeHoldKey = baseMode
+        }
+
+        state.active = true
+        state.keyDown = keyCode
+        state.targetMode = target
+
+        lastActivatedHoldSlot = state.id
+        if (state.id == 1) AppState.modeBeforeHold1 = baseMode else AppState.modeBeforeHold2 = baseMode
+
+        syncHoldStateToAppState()
+
+        if (AppState.currentMode == target) {
+            val desiredProc = procValueForMode(target)
+            val currentProc = if (desiredProc != null) TrackpadController.readValue() else null
+            if (desiredProc == null || currentProc == null || currentProc == desiredProc) {
+                if (prefs.isToastHoldKeyEnabled()) {
+                    ToastHelper.show(this, "$toastPrefix: ${modeLabel(target)}")
+                }
+                return
+            }
+        }
+
+        val ok = TrackpadController.setModeValue(target)
+        if (!ok) {
+            showRootError()
+
+            state.active = false
+            state.keyDown = null
+            state.targetMode = null
+
+            if (!(hold1.active || hold2.active)) {
+                AppState.modeBeforeHoldKey = null
+                AppState.modeBeforeHold1 = null
+                AppState.modeBeforeHold2 = null
+                lastActivatedHoldSlot = 0
+            }
+
+            syncHoldStateToAppState()
+            return
+        }
+
+        NotificationHelper.clearRootError(this)
+        AppState.currentMode = target
+
+        if (prefs.isToastHoldKeyEnabled()) {
+            ToastHelper.show(this, "$toastPrefix: ${modeLabel(target)}")
+        }
+    }
+
+    private fun endHold(state: HoldRuntimeState, fg: String?) {
+        val releasedKey = state.keyDown
+
+        state.active = false
+        state.keyDown = null
+        state.targetMode = null
+
+        if (lastActivatedHoldSlot == state.id) {
+            lastActivatedHoldSlot = when {
+                hold2.active -> 2
+                hold1.active -> 1
+                else -> 0
+            }
+        }
+
+        val otherActiveTarget: Mode? = when {
+            hold1.active -> hold1.targetMode
+            hold2.active -> hold2.targetMode
+            else -> null
+        }
+
+        val restoreTarget = when {
+            otherActiveTarget != null -> otherActiveTarget
+            AppState.textInputOverrideActive -> Mode.KEYBOARD
+            else -> AppState.modeBeforeHoldKey ?: getEffectiveModeForPackage(fg)
+        }
+
+        if (!(hold1.active || hold2.active)) {
+            AppState.modeBeforeHoldKey = null
+            AppState.modeBeforeHold1 = null
+            AppState.modeBeforeHold2 = null
+        }
+
+        if (!hold1.active && !hold2.active) {
+            if (AppState.hold1KeyCodeDown == releasedKey) AppState.hold1KeyCodeDown = null
+            if (AppState.hold2KeyCodeDown == releasedKey) AppState.hold2KeyCodeDown = null
+        }
+
+        syncHoldStateToAppState()
+
+        if (AppState.currentMode == restoreTarget) {
+            val desiredProc = procValueForMode(restoreTarget)
+            val currentProc = if (desiredProc != null) TrackpadController.readValue() else null
+            if (desiredProc == null || currentProc == null || currentProc == desiredProc) {
+                return
+            }
+        }
+
+        val ok = TrackpadController.setModeValue(restoreTarget)
+        if (!ok) {
+            showRootError()
+            return
+        }
+
+        NotificationHelper.clearRootError(this)
+        AppState.currentMode = restoreTarget
     }
 
     private fun computeHoldTargetMode(base: Mode, holdMode: HoldMode): Mode? {
@@ -695,25 +1076,18 @@ class AppSwitchService : AccessibilityService() {
             AppState.manualOverrideForPackage = null
         }
 
-        // Clear text-input override when switching apps.
         if (AppState.textInputOverrideActive && prevFg != null && prevFg != packageName) {
             AppState.textInputOverrideActive = false
             AppState.modeBeforeTextInput = null
             stopTextOverrideMonitor()
         }
 
-        // Clear hold-key override when switching apps.
-        if (AppState.holdKeyActive && prevFg != null && prevFg != packageName) {
-            AppState.holdKeyActive = false
-            AppState.holdKeyCodeDown = null
-            AppState.modeBeforeHoldKey = null
+        if ((hold1.active || hold2.active) && prevFg != null && prevFg != packageName) {
+            clearAllHoldState()
         }
 
-        // Keep manual override active while staying in the same app.
         if (AppState.manualOverrideForPackage == packageName) return
-
-        // Avoid stomping temporary overrides on extra window events within the same app.
-        if (AppState.textInputOverrideActive || AppState.holdKeyActive) return
+        if (AppState.textInputOverrideActive || hold1.active || hold2.active) return
 
         val (effectiveMode, isDefault) = when (val appMode = prefs.getAppMode(packageName)) {
             Mode.MOUSE, Mode.KEYBOARD, Mode.SCROLL_WHEEL -> appMode to false
@@ -759,7 +1133,6 @@ class AppSwitchService : AccessibilityService() {
         lastAppliedMode = effectiveMode
         AppState.currentMode = effectiveMode
 
-        // Persist logical mode for reliable restore (not used for temporary overrides).
         prefs.setLastKnownMode(effectiveMode)
     }
 
@@ -799,5 +1172,7 @@ class AppSwitchService : AccessibilityService() {
 
     companion object {
         private const val TEXT_OVERRIDE_CHECK_INTERVAL_MS = 350L
+        private const val DOUBLE_PRESS_TIMEOUT_MS = 320L
+        private const val SINGLE_HOLD_ACTIVATE_DELAY_MS = 120L
     }
 }

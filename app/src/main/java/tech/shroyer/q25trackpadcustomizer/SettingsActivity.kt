@@ -14,7 +14,6 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.Gravity
 import android.view.KeyEvent
-import android.view.View
 import android.view.ViewGroup
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
@@ -39,26 +38,35 @@ class SettingsActivity : AppCompatActivity() {
     // Auto keyboard for text input
     private lateinit var checkAutoKeyboardText: CheckBox
 
-    // Hold-key global settings UI
+    // Primary Hold global
     private lateinit var spinnerGlobalHoldMode: Spinner
     private lateinit var tvGlobalHoldKeyCode: TextView
     private lateinit var btnSetGlobalHoldKey: Button
     private lateinit var checkHoldAllowedInTextGlobal: CheckBox
+    private lateinit var checkHoldDoublePressGlobal: CheckBox
 
-    // Global scroll settings UI
+    // Secondary Hold global
+    private lateinit var spinnerGlobalHold2Mode: Spinner
+    private lateinit var checkHold2UseHold1DoubleGlobal: CheckBox
+    private lateinit var tvGlobalHold2KeyCode: TextView
+    private lateinit var btnSetGlobalHold2Key: Button
+    private lateinit var checkHold2AllowedInTextGlobal: CheckBox
+    private lateinit var checkHold2DoublePressGlobal: CheckBox
+
+    // Global scroll
     private lateinit var spinnerScrollSensitivity: Spinner
     private lateinit var checkScrollHorizontal: CheckBox
     private lateinit var checkScrollInvertVertical: CheckBox
     private lateinit var checkScrollInvertHorizontal: CheckBox
 
-    // Backup/restore UI
+    // Backup/restore
     private lateinit var btnBackupSettings: Button
     private lateinit var btnRestoreSettings: Button
 
-    // Updates UI
+    // Updates
     private lateinit var btnCheckUpdates: Button
 
-    // Exclusions UI
+    // Exclusions
     private lateinit var btnAddExcludedApps: Button
     private lateinit var recyclerExcludedApps: RecyclerView
     private lateinit var editSearchExcluded: EditText
@@ -105,7 +113,6 @@ class SettingsActivity : AppCompatActivity() {
         "Scroll wheel"
     )
 
-    // Prevent UI refresh from writing prefs.
     private var suppressUiListeners = false
 
     private val backupCreateLauncher =
@@ -156,14 +163,23 @@ class SettingsActivity : AppCompatActivity() {
         checkToastHoldKey = findViewById(R.id.checkToastHoldKey)
         spinnerTheme = findViewById(R.id.spinnerTheme)
 
-        // Auto keyboard for text input
+        // Auto keyboard
         checkAutoKeyboardText = findViewById(R.id.checkAutoKeyboardText)
 
-        // Hold-key global settings
+        // Primary Hold
         spinnerGlobalHoldMode = findViewById(R.id.spinnerGlobalHoldMode)
         tvGlobalHoldKeyCode = findViewById(R.id.tvGlobalHoldKeyCode)
         btnSetGlobalHoldKey = findViewById(R.id.btnSetGlobalHoldKey)
         checkHoldAllowedInTextGlobal = findViewById(R.id.checkHoldAllowedInTextGlobal)
+        checkHoldDoublePressGlobal = findViewById(R.id.checkHoldDoublePressGlobal)
+
+        // Secondary Hold
+        spinnerGlobalHold2Mode = findViewById(R.id.spinnerGlobalHold2Mode)
+        checkHold2UseHold1DoubleGlobal = findViewById(R.id.checkHold2UseHold1DoubleGlobal)
+        tvGlobalHold2KeyCode = findViewById(R.id.tvGlobalHold2KeyCode)
+        btnSetGlobalHold2Key = findViewById(R.id.btnSetGlobalHold2Key)
+        checkHold2AllowedInTextGlobal = findViewById(R.id.checkHold2AllowedInTextGlobal)
+        checkHold2DoublePressGlobal = findViewById(R.id.checkHold2DoublePressGlobal)
 
         // Scroll
         spinnerScrollSensitivity = findViewById(R.id.spinnerScrollSensitivity)
@@ -206,54 +222,57 @@ class SettingsActivity : AppCompatActivity() {
         suppressUiListeners = true
         try {
             // Toasts
-            if (::checkToastQuick.isInitialized) checkToastQuick.isChecked = prefs.isToastQuickToggleEnabled()
-            if (::checkToastPerApp.isInitialized) checkToastPerApp.isChecked = prefs.isToastPerAppEnabled()
-            if (::checkToastDefault.isInitialized) checkToastDefault.isChecked = prefs.isToastDefaultModeEnabled()
-            if (::checkToastHoldKey.isInitialized) checkToastHoldKey.isChecked = prefs.isToastHoldKeyEnabled()
+            checkToastQuick.isChecked = prefs.isToastQuickToggleEnabled()
+            checkToastPerApp.isChecked = prefs.isToastPerAppEnabled()
+            checkToastDefault.isChecked = prefs.isToastDefaultModeEnabled()
+            checkToastHoldKey.isChecked = prefs.isToastHoldKeyEnabled()
 
-            // Theme spinner
-            if (::spinnerTheme.isInitialized) {
-                val currentTheme = prefs.getThemePref()
-                val idx = themeOptions.indexOf(currentTheme).coerceAtLeast(0)
-                if (spinnerTheme.selectedItemPosition != idx) {
-                    spinnerTheme.setSelection(idx, false)
-                }
+            // Theme
+            val currentTheme = prefs.getThemePref()
+            val themeIdx = themeOptions.indexOf(currentTheme).coerceAtLeast(0)
+            if (spinnerTheme.selectedItemPosition != themeIdx) {
+                spinnerTheme.setSelection(themeIdx, false)
             }
 
             // Auto keyboard
-            if (::checkAutoKeyboardText.isInitialized) {
-                checkAutoKeyboardText.isChecked = prefs.isGlobalAutoKeyboardForTextEnabled()
+            checkAutoKeyboardText.isChecked = prefs.isGlobalAutoKeyboardForTextEnabled()
+
+            // Primary Hold
+            val hold1Mode = prefs.getGlobalHoldMode()
+            val hold1Idx = holdModeOptions.indexOf(hold1Mode).coerceAtLeast(0)
+            if (spinnerGlobalHoldMode.selectedItemPosition != hold1Idx) {
+                spinnerGlobalHoldMode.setSelection(hold1Idx, false)
+            }
+            refreshKeyLabel(tvGlobalHoldKeyCode, prefs.getGlobalHoldKeyCode())
+            checkHoldAllowedInTextGlobal.isChecked = prefs.isGlobalHoldAllowedInTextFields()
+            checkHoldDoublePressGlobal.isChecked = prefs.isGlobalHoldDoublePressRequired()
+
+            // Secondary Hold
+            val hold2Mode = prefs.getGlobalHold2Mode()
+            val hold2Idx = holdModeOptions.indexOf(hold2Mode).coerceAtLeast(0)
+            if (spinnerGlobalHold2Mode.selectedItemPosition != hold2Idx) {
+                spinnerGlobalHold2Mode.setSelection(hold2Idx, false)
             }
 
-            // Hold-key globals
-            if (::spinnerGlobalHoldMode.isInitialized) {
-                val currentMode = prefs.getGlobalHoldMode()
-                val idx = holdModeOptions.indexOf(currentMode).coerceAtLeast(0)
-                if (spinnerGlobalHoldMode.selectedItemPosition != idx) {
-                    spinnerGlobalHoldMode.setSelection(idx, false)
-                }
-            }
-            if (::tvGlobalHoldKeyCode.isInitialized) {
-                refreshHoldKeyCodeLabel(prefs.getGlobalHoldKeyCode())
-            }
-            if (::checkHoldAllowedInTextGlobal.isInitialized) {
-                checkHoldAllowedInTextGlobal.isChecked = prefs.isGlobalHoldAllowedInTextFields()
-            }
+            val tied = prefs.isGlobalHold2UseHold1DoublePressHold()
+            checkHold2UseHold1DoubleGlobal.isChecked = tied
+            checkHold2AllowedInTextGlobal.isChecked = prefs.isGlobalHold2AllowedInTextFields()
+            checkHold2DoublePressGlobal.isChecked = prefs.isGlobalHold2DoublePressRequired()
 
-            // Scroll globals
-            if (::spinnerScrollSensitivity.isInitialized) {
-                val current = prefs.getGlobalScrollSettings()
-                val idx = scrollSensOptions.indexOf(current.sensitivity).coerceAtLeast(0)
-                if (spinnerScrollSensitivity.selectedItemPosition != idx) {
-                    spinnerScrollSensitivity.setSelection(idx, false)
-                }
-                if (::checkScrollHorizontal.isInitialized) checkScrollHorizontal.isChecked = current.horizontalEnabled
-                if (::checkScrollInvertVertical.isInitialized) checkScrollInvertVertical.isChecked = current.invertVertical
-                if (::checkScrollInvertHorizontal.isInitialized) checkScrollInvertHorizontal.isChecked = current.invertHorizontal
-            }
+            updateHold2UiEnabledState()
 
-            // Exclusions list
-            if (::editSearchExcluded.isInitialized && ::excludedAdapter.isInitialized) {
+            // Scroll
+            val scroll = prefs.getGlobalScrollSettings()
+            val scrollIdx = scrollSensOptions.indexOf(scroll.sensitivity).coerceAtLeast(0)
+            if (spinnerScrollSensitivity.selectedItemPosition != scrollIdx) {
+                spinnerScrollSensitivity.setSelection(scrollIdx, false)
+            }
+            checkScrollHorizontal.isChecked = scroll.horizontalEnabled
+            checkScrollInvertVertical.isChecked = scroll.invertVertical
+            checkScrollInvertHorizontal.isChecked = scroll.invertHorizontal
+
+            // Exclusions
+            if (::excludedAdapter.isInitialized) {
                 refreshExcludedList(editSearchExcluded.text?.toString().orEmpty())
             }
         } finally {
@@ -288,17 +307,12 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun setupThemeSpinner() {
-        val adapter = ArrayAdapter(
-            this,
-            AndroidR.layout.simple_spinner_item,
-            themeLabels
-        )
+        val adapter = ArrayAdapter(this, AndroidR.layout.simple_spinner_item, themeLabels)
         adapter.setDropDownViewResource(AndroidR.layout.simple_spinner_dropdown_item)
         spinnerTheme.adapter = adapter
 
         val currentTheme = prefs.getThemePref()
         val index = themeOptions.indexOf(currentTheme).coerceAtLeast(0)
-
         spinnerTheme.setSelection(index, false)
 
         spinnerTheme.setOnItemSelectedListenerSimple { position ->
@@ -312,7 +326,7 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    // ---------- Auto keyboard for text input ----------
+    // ---------- Auto keyboard ----------
 
     private fun setupAutoKeyboardForText() {
         checkAutoKeyboardText.isChecked = prefs.isGlobalAutoKeyboardForTextEnabled()
@@ -322,21 +336,15 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    // ---------- Hold-key global settings ----------
+    // ---------- Hold keys ----------
 
     private fun setupHoldKeySettings() {
-        val holdModeAdapter = ArrayAdapter(
-            this,
-            AndroidR.layout.simple_spinner_item,
-            holdModeLabels
-        )
+        val holdModeAdapter = ArrayAdapter(this, AndroidR.layout.simple_spinner_item, holdModeLabels)
         holdModeAdapter.setDropDownViewResource(AndroidR.layout.simple_spinner_dropdown_item)
+
+        // Primary Hold mode
         spinnerGlobalHoldMode.adapter = holdModeAdapter
-
-        val currentMode = prefs.getGlobalHoldMode()
-        val modeIndex = holdModeOptions.indexOf(currentMode).coerceAtLeast(0)
-        spinnerGlobalHoldMode.setSelection(modeIndex, false)
-
+        spinnerGlobalHoldMode.setSelection(holdModeOptions.indexOf(prefs.getGlobalHoldMode()).coerceAtLeast(0), false)
         spinnerGlobalHoldMode.setOnItemSelectedListenerSimple { position ->
             if (suppressUiListeners) return@setOnItemSelectedListenerSimple
             val selected = holdModeOptions[position]
@@ -345,46 +353,213 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        refreshHoldKeyCodeLabel(prefs.getGlobalHoldKeyCode())
-
+        // Primary Hold key
+        refreshKeyLabel(tvGlobalHoldKeyCode, prefs.getGlobalHoldKeyCode())
         btnSetGlobalHoldKey.setOnClickListener {
             showKeyCaptureDialog(
+                title = "Set Primary Hold key",
                 initialKeyCode = prefs.getGlobalHoldKeyCode(),
                 onKeySelected = { keyCode ->
                     prefs.setGlobalHoldKeyCode(keyCode)
-                    refreshHoldKeyCodeLabel(keyCode)
+                    refreshKeyLabel(tvGlobalHoldKeyCode, keyCode)
                 },
                 onDefault = {
                     val def = Prefs.DEFAULT_HOLD_KEYCODE
                     prefs.setGlobalHoldKeyCode(def)
-                    refreshHoldKeyCodeLabel(def)
+                    refreshKeyLabel(tvGlobalHoldKeyCode, def)
                 }
             )
         }
 
+        // Primary Hold allow in text
         checkHoldAllowedInTextGlobal.isChecked = prefs.isGlobalHoldAllowedInTextFields()
         checkHoldAllowedInTextGlobal.setOnCheckedChangeListener { _, isChecked ->
             if (suppressUiListeners) return@setOnCheckedChangeListener
             prefs.setGlobalHoldAllowedInTextFields(isChecked)
         }
+
+        // Primary Hold double press
+        checkHoldDoublePressGlobal.isChecked = prefs.isGlobalHoldDoublePressRequired()
+        checkHoldDoublePressGlobal.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressUiListeners) return@setOnCheckedChangeListener
+
+            if (isChecked && prefs.isGlobalHold2UseHold1DoublePressHold()) {
+                showConfirmDialog(
+                    title = "Conflict",
+                    message = "Secondary Hold is currently triggered by Primary Hold double press + hold.\n\n" +
+                            "Enabling Primary Hold double-press requirement will disable that Secondary Hold option. Continue?",
+                    positive = "Disable Secondary Hold tie",
+                    negative = "Cancel",
+                    onYes = {
+                        prefs.setGlobalHold2UseHold1DoublePressHold(false)
+                        prefs.setGlobalHoldDoublePressRequired(true)
+                        refreshUiFromPrefs()
+                    },
+                    onNo = {
+                        suppressUiListeners = true
+                        try {
+                            checkHoldDoublePressGlobal.isChecked = false
+                        } finally {
+                            suppressUiListeners = false
+                        }
+                    }
+                )
+            } else {
+                prefs.setGlobalHoldDoublePressRequired(isChecked)
+            }
+        }
+
+        // Secondary Hold mode
+        spinnerGlobalHold2Mode.adapter = holdModeAdapter
+        spinnerGlobalHold2Mode.setSelection(holdModeOptions.indexOf(prefs.getGlobalHold2Mode()).coerceAtLeast(0), false)
+        spinnerGlobalHold2Mode.setOnItemSelectedListenerSimple { position ->
+            if (suppressUiListeners) return@setOnItemSelectedListenerSimple
+            val selected = holdModeOptions[position]
+            if (selected != prefs.getGlobalHold2Mode()) {
+                prefs.setGlobalHold2Mode(selected)
+                updateHold2UiEnabledState()
+            }
+        }
+
+        // Secondary Hold tied to Primary Hold double gesture
+        checkHold2UseHold1DoubleGlobal.isChecked = prefs.isGlobalHold2UseHold1DoublePressHold()
+        checkHold2UseHold1DoubleGlobal.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressUiListeners) return@setOnCheckedChangeListener
+
+            if (isChecked) {
+                if (prefs.isGlobalHoldDoublePressRequired()) {
+                    showConfirmDialog(
+                        title = "Conflict",
+                        message = "This will disable “Primary Hold: require double press + hold” to avoid conflicts.\n\nContinue?",
+                        positive = "Continue",
+                        negative = "Cancel",
+                        onYes = {
+                            prefs.setGlobalHoldDoublePressRequired(false)
+                            prefs.setGlobalHold2UseHold1DoublePressHold(true)
+                            prefs.setGlobalHold2DoublePressRequired(false)
+                            refreshUiFromPrefs()
+                        },
+                        onNo = {
+                            suppressUiListeners = true
+                            try {
+                                checkHold2UseHold1DoubleGlobal.isChecked = false
+                            } finally {
+                                suppressUiListeners = false
+                            }
+                        }
+                    )
+                } else {
+                    prefs.setGlobalHold2UseHold1DoublePressHold(true)
+                    prefs.setGlobalHold2DoublePressRequired(false)
+                    refreshUiFromPrefs()
+                }
+            } else {
+                prefs.setGlobalHold2UseHold1DoublePressHold(false)
+                refreshUiFromPrefs()
+            }
+        }
+
+        // Secondary Hold key
+        btnSetGlobalHold2Key.setOnClickListener {
+            if (prefs.isGlobalHold2UseHold1DoublePressHold()) {
+                Toast.makeText(this, "Secondary Hold is tied to Primary Hold double press + hold.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            showKeyCaptureDialog(
+                title = "Set Secondary Hold key",
+                initialKeyCode = prefs.getGlobalHold2KeyCode(),
+                onKeySelected = { keyCode ->
+                    prefs.setGlobalHold2KeyCode(keyCode)
+                    refreshKeyLabel(tvGlobalHold2KeyCode, keyCode)
+                },
+                onDefault = {
+                    val def = Prefs.DEFAULT_HOLD2_KEYCODE
+                    prefs.setGlobalHold2KeyCode(def)
+                    refreshKeyLabel(tvGlobalHold2KeyCode, def)
+                }
+            )
+        }
+
+        // Secondary Hold allow in text
+        checkHold2AllowedInTextGlobal.isChecked = prefs.isGlobalHold2AllowedInTextFields()
+        checkHold2AllowedInTextGlobal.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressUiListeners) return@setOnCheckedChangeListener
+            prefs.setGlobalHold2AllowedInTextFields(isChecked)
+        }
+
+        // Secondary Hold double press
+        checkHold2DoublePressGlobal.isChecked = prefs.isGlobalHold2DoublePressRequired()
+        checkHold2DoublePressGlobal.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressUiListeners) return@setOnCheckedChangeListener
+            if (prefs.isGlobalHold2UseHold1DoublePressHold()) {
+                suppressUiListeners = true
+                try {
+                    checkHold2DoublePressGlobal.isChecked = false
+                } finally {
+                    suppressUiListeners = false
+                }
+                Toast.makeText(this, "Not applicable while Secondary Hold is tied to Primary Hold double press.", Toast.LENGTH_SHORT).show()
+                return@setOnCheckedChangeListener
+            }
+            prefs.setGlobalHold2DoublePressRequired(isChecked)
+        }
+
+        updateHold2UiEnabledState()
     }
 
-    private fun refreshHoldKeyCodeLabel(keyCode: Int) {
-        tvGlobalHoldKeyCode.text = "$keyCode (${KeyEvent.keyCodeToString(keyCode)})"
+    private fun updateHold2UiEnabledState() {
+        val hold2Enabled = prefs.getGlobalHold2Mode() != HoldMode.DISABLED
+        val tied = prefs.isGlobalHold2UseHold1DoublePressHold()
+
+        btnSetGlobalHold2Key.isEnabled = hold2Enabled && !tied
+        checkHold2AllowedInTextGlobal.isEnabled = hold2Enabled
+
+        checkHold2DoublePressGlobal.isEnabled = hold2Enabled && !tied
+        if (tied) {
+            suppressUiListeners = true
+            try {
+                checkHold2DoublePressGlobal.isChecked = false
+            } finally {
+                suppressUiListeners = false
+            }
+        }
+
+        tvGlobalHold2KeyCode.alpha = if (hold2Enabled) 1.0f else 0.5f
+        btnSetGlobalHold2Key.alpha = if (btnSetGlobalHold2Key.isEnabled) 1.0f else 0.5f
+        checkHold2AllowedInTextGlobal.alpha = if (hold2Enabled) 1.0f else 0.5f
+        checkHold2DoublePressGlobal.alpha = if (checkHold2DoublePressGlobal.isEnabled) 1.0f else 0.5f
+
+        tvGlobalHold2KeyCode.text = when {
+            !hold2Enabled -> "Disabled"
+            tied -> "Tied to Primary Hold double press + hold"
+            else -> formatKeyLabel(prefs.getGlobalHold2KeyCode())
+        }
+    }
+
+    private fun refreshKeyLabel(target: TextView, keyCode: Int) {
+        target.text = formatKeyLabel(keyCode)
+    }
+
+    private fun formatKeyLabel(keyCode: Int): String {
+        val raw = KeyEvent.keyCodeToString(keyCode)
+        val nice = raw.removePrefix("KEYCODE_").replace('_', ' ')
+        return "$nice ($keyCode)"
     }
 
     private fun showKeyCaptureDialog(
+        title: String,
         initialKeyCode: Int,
         onKeySelected: (Int) -> Unit,
         onDefault: () -> Unit
     ) {
         val message = TextView(this).apply {
-            text = "Press any key to set as the hold modifier.\n\nCurrent: $initialKeyCode (${KeyEvent.keyCodeToString(initialKeyCode)})"
+            text = "Press any key to set the modifier.\n\nCurrent: ${formatKeyLabel(initialKeyCode)}"
             setPadding(48, 32, 48, 0)
         }
 
         val dialog = AlertDialog.Builder(this)
-            .setTitle("Set hold modifier key")
+            .setTitle(title)
             .setView(message)
             .setPositiveButton("Cancel") { d, _ -> d.dismiss() }
             .setNeutralButton("Default") { d, _ ->
@@ -406,25 +581,36 @@ class SettingsActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    // ---------- Global Scroll Settings ----------
+    private fun showConfirmDialog(
+        title: String,
+        message: String,
+        positive: String,
+        negative: String,
+        onYes: () -> Unit,
+        onNo: () -> Unit
+    ) {
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton(positive) { _, _ -> onYes() }
+            .setNegativeButton(negative) { _, _ -> onNo() }
+            .setCancelable(false)
+            .show()
+    }
+
+    // ---------- Global Scroll ----------
 
     private fun setupGlobalScrollSettings() {
-        val adapter = ArrayAdapter(
-            this,
-            AndroidR.layout.simple_spinner_item,
-            scrollSensLabels
-        )
+        val adapter = ArrayAdapter(this, AndroidR.layout.simple_spinner_item, scrollSensLabels)
         adapter.setDropDownViewResource(AndroidR.layout.simple_spinner_dropdown_item)
         spinnerScrollSensitivity.adapter = adapter
 
         val current = prefs.getGlobalScrollSettings()
-        val index = scrollSensOptions.indexOf(current.sensitivity).coerceAtLeast(0)
-        spinnerScrollSensitivity.setSelection(index, false)
+        spinnerScrollSensitivity.setSelection(scrollSensOptions.indexOf(current.sensitivity).coerceAtLeast(0), false)
 
         spinnerScrollSensitivity.setOnItemSelectedListenerSimple { position ->
             if (suppressUiListeners) return@setOnItemSelectedListenerSimple
-            val sens = scrollSensOptions[position]
-            prefs.setGlobalScrollSensitivity(sens)
+            prefs.setGlobalScrollSensitivity(scrollSensOptions[position])
         }
 
         checkScrollHorizontal.isChecked = current.horizontalEnabled
@@ -491,17 +677,15 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    // ---------- Updates (manual GitHub release check) ----------
+    // ---------- Updates ----------
 
     private fun setupUpdateChecker() {
-        btnCheckUpdates.setOnClickListener {
-            checkForUpdatesManual()
-        }
+        btnCheckUpdates.setOnClickListener { checkForUpdatesManual() }
     }
 
     private fun setupViewOnGitHubLink() {
         val parent = btnCheckUpdates.parent as? ViewGroup ?: return
-        val existing = parent.findViewWithTag<View>(TAG_VIEW_ON_GITHUB_LINK)
+        val existing = parent.findViewWithTag<ViewGroup>(TAG_VIEW_ON_GITHUB_LINK)
         if (existing != null) return
 
         val link = TextView(this).apply {
@@ -512,12 +696,9 @@ class SettingsActivity : AppCompatActivity() {
             setPadding(0, dp(6), 0, dp(2))
             isClickable = true
             isFocusable = true
-            setOnClickListener {
-                openGitHubReleasePage()
-            }
+            setOnClickListener { openGitHubReleasePage() }
         }
 
-        // Try to insert immediately after the "Check for updates" button.
         val idx = parent.indexOfChild(btnCheckUpdates)
         if (idx >= 0 && idx < parent.childCount - 1) {
             parent.addView(link, idx + 1)
@@ -527,7 +708,6 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun openGitHubReleasePage() {
-        // Open the stable web URL
         openInBrowser(UpdateChecker.LATEST_RELEASE_WEB_URL)
     }
 
@@ -565,7 +745,7 @@ class SettingsActivity : AppCompatActivity() {
                                 AlertDialog.Builder(this)
                                     .setTitle("You’re ahead of GitHub!")
                                     .setMessage(
-                                        "Installed version is newer than latest version. What's it like in the future?\n\n" +
+                                        "Installed version is newer than latest version.\n\n" +
                                                 "Installed: $installedDisplay\n" +
                                                 "Latest: $latestDisplay"
                                     )
@@ -593,26 +773,18 @@ class SettingsActivity : AppCompatActivity() {
 
                             else -> {
                                 val openUrl = result.release.apkUrl ?: result.release.htmlUrl
-                                val openLabel = if (result.release.apkUrl != null) {
-                                    "Open APK download"
-                                } else {
-                                    "Open release page"
-                                }
+                                val openLabel = if (result.release.apkUrl != null) "Open APK download" else "Open release page"
 
                                 AlertDialog.Builder(this)
                                     .setTitle("Update available!")
                                     .setMessage(
-                                        "An update is available! How exciting.\n\n" +
+                                        "An update is available.\n\n" +
                                                 "Installed: $installedDisplay\n" +
                                                 "Latest: $latestDisplay\n\n" +
                                                 "After updating, you will need to re-enable the Accessibility Service!"
                                     )
-                                    .setPositiveButton(openLabel) { _, _ ->
-                                        openInBrowser(openUrl)
-                                    }
-                                    .setNeutralButton("View on GitHub") { _, _ ->
-                                        openInBrowser(result.release.htmlUrl)
-                                    }
+                                    .setPositiveButton(openLabel) { _, _ -> openInBrowser(openUrl) }
+                                    .setNeutralButton("View on GitHub") { _, _ -> openInBrowser(result.release.htmlUrl) }
                                     .setNegativeButton("Cancel", null)
                                     .show()
                             }
@@ -625,8 +797,7 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun openInBrowser(url: String) {
         try {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-            startActivity(intent)
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         } catch (_: ActivityNotFoundException) {
             Toast.makeText(this, "No browser found to open the link.", Toast.LENGTH_LONG).show()
         } catch (_: Exception) {
@@ -645,9 +816,7 @@ class SettingsActivity : AppCompatActivity() {
             )
         }
 
-        val bar = ProgressBar(this).apply {
-            isIndeterminate = true
-        }
+        val bar = ProgressBar(this).apply { isIndeterminate = true }
 
         val tv = TextView(this).apply {
             text = "Comparing installed vs latest release on GitHub."
@@ -669,7 +838,7 @@ class SettingsActivity : AppCompatActivity() {
         return (value * resources.displayMetrics.density).toInt()
     }
 
-    // ---------- Excluded Apps Section ----------
+    // ---------- Exclusions ----------
 
     private fun setupExcludedAppsSection() {
         recyclerExcludedApps.layoutManager = LinearLayoutManager(this)
@@ -709,8 +878,7 @@ class SettingsActivity : AppCompatActivity() {
         val pkgs = prefs.getExcludedPackages()
         val pm = packageManager
 
-        val items = pkgs.map { pkg -> buildExcludedAppItem(pm, pkg) }
-        allExcludedItems = items
+        allExcludedItems = pkgs.map { pkg -> buildExcludedAppItem(pm, pkg) }
 
         val filtered = if (query.isBlank()) {
             allExcludedItems
@@ -750,10 +918,7 @@ class SettingsActivity : AppCompatActivity() {
         val allCandidates = loadCandidateAppsForExclusion()
 
         lateinit var pickerAdapter: ExclusionPickerAdapter
-        pickerAdapter = ExclusionPickerAdapter(
-            this,
-            allCandidates.toMutableList()
-        ) { app ->
+        pickerAdapter = ExclusionPickerAdapter(this, allCandidates.toMutableList()) { app ->
             prefs.addExcludedPackage(app.packageName)
             refreshExcludedList(editSearchExcluded.text?.toString().orEmpty())
             pickerAdapter.removeApp(app.packageName)

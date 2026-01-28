@@ -8,9 +8,9 @@ object TrackpadController {
     private const val PROC_PATH = "/proc/q20_switch_key_mouse"
 
     /**
-     * I toggle between 0 and 1 and return the new Mode if successful.
+     * Toggle between 0 and 1 and return the new Mode if successful.
      * 0 = Mouse, 1 = Keyboard (per your mapping).
-     * For SCROLL_WHEEL, I still use the keyboard hardware mode (1) and rely on
+     * For SCROLL_WHEEL, it still uses the keyboard hardware mode (1) and relies on
      * Accessibility logic to transform arrow keys into scroll actions.
      */
     fun toggleValue(): Mode? {
