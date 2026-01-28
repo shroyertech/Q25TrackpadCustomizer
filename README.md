@@ -28,6 +28,12 @@ Android app (Accessibility Service) for Zinwa Q25
 - This app uses an AccessibilityService to monitor the foreground app and focused views.
 - Scroll wheel mode maps DPAD keys (keyboard mode) to scroll gestures.
 
+## FAQ
+- Q: Why did scroll wheel mode / per app settings stop working after updating?
+- - A: You need to re-enable the accessibility service after updating
+- Q: How can I disable the pop ups when it switches modes?
+- - A: You can disable all toasts individually on the Settings page, at the very top. Just uncheck the box for anything you don't want to see a toast for.
+
 ## License
 See [LICENSE](LICENSE).
 
@@ -36,3 +42,6 @@ See [LICENSE](LICENSE).
 - You can make a donation [here](https://give.wvu.edu/give/430764/#!/donation/checkout)
 - You can read more about the WVU Cancer Institute [here](https://give.wvu.edu/campaign/wvu-cancer-institute/c430764)
 - Thank you <3
+
+## Attributions
+- App icon created by WhoCon from [FlatIcon](https://www.flaticon.com/free-icons/toggle)
