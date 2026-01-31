@@ -21,7 +21,7 @@ Android app (Accessibility Service) for Zinwa Q25.
 
 ## Setup / Usage
 
-**Prerequisite: 🚨This app requires root!**🚨 
+🚨 **Prerequisite: This app requires root!** 🚨 
 The app also requires enabling its Accessibility Service.
 
 ### 1) Install
