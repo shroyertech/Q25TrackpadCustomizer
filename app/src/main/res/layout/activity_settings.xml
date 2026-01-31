@@ -38,6 +38,47 @@
                 android:textColor="?android:attr/textColorSecondary" />
         </LinearLayout>
 
+        <!-- Initial Setup -->
+        <TextView
+            android:id="@+id/tvInitialSetupLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Initial setup"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvInitialSetupSubtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Use these if Root or the Accessibility Service isn’t enabled yet."
+            android:textSize="12sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:layout_marginBottom="6dp" />
+
+        <Button
+            android:id="@+id/btnTestRootAccess"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Test / Grant Root Access"
+            android:layout_marginBottom="6dp" />
+
+        <Button
+            android:id="@+id/btnAccessibilitySetup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Accessibility service setup"
+            android:layout_marginBottom="8dp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="12dp"
+            android:background="?android:attr/listDivider" />
+
         <!-- Toast section subtitle -->
         <TextView
             android:id="@+id/tvSettingsSubtitle"
@@ -96,6 +137,77 @@
             android:layout_height="1dp"
             android:layout_marginTop="4dp"
             android:layout_marginBottom="12dp"
+            android:background="?android:attr/listDivider" />
+
+        <!-- Quick Toggle settings -->
+        <TextView
+            android:id="@+id/tvQuickToggleLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Quick toggle"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvQuickToggleModesLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Modes to cycle"
+            android:textSize="12sp" />
+
+        <LinearLayout
+            android:id="@+id/layoutQuickToggleModesRow"
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="6dp">
+
+            <CheckBox
+                android:id="@+id/checkQuickToggleMouse"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Mouse"
+                android:textSize="12sp" />
+
+            <CheckBox
+                android:id="@+id/checkQuickToggleKeyboard"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Keyboard"
+                android:textSize="12sp" />
+
+            <CheckBox
+                android:id="@+id/checkQuickToggleScroll"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Scroll wheel"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvQuickToggleFallbackLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Fallback when only 1 mode is selected (and it matches current)"
+            android:textSize="12sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:layout_marginBottom="2dp" />
+
+        <Spinner
+            android:id="@+id/spinnerQuickToggleFallback"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginBottom="8dp"
             android:background="?android:attr/listDivider" />
 
         <!-- Theme -->
@@ -230,7 +342,6 @@
             android:textSize="12sp"
             android:layout_marginBottom="6dp" />
 
-        <!-- Primary Hold trigger type -->
         <CheckBox
             android:id="@+id/checkHoldDoublePressGlobal"
             android:layout_width="match_parent"
@@ -268,7 +379,6 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="6dp" />
 
-        <!-- Tie Secondary Hold to Primary Hold double gesture -->
         <CheckBox
             android:id="@+id/checkHold2UseHold1DoubleGlobal"
             android:layout_width="match_parent"
@@ -400,7 +510,19 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Check for updates"
-            android:layout_marginBottom="8dp" />
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvViewOnGitHub"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="View on GitHub"
+            android:textSize="12sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:paddingTop="2dp"
+            android:paddingBottom="6dp"
+            android:clickable="true"
+            android:focusable="true" />
 
         <View
             android:layout_width="match_parent"

@@ -1,8 +1,8 @@
 package tech.shroyer.q25trackpadcustomizer
 
 import android.R as AndroidR
-import android.app.AlertDialog
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Paint
@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.Gravity
@@ -17,6 +18,7 @@ import android.view.KeyEvent
 import android.view.ViewGroup
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -28,12 +30,23 @@ class SettingsActivity : AppCompatActivity() {
     // Header
     private lateinit var tvSettingsVersion: TextView
 
+    // Initial Setup
+    private lateinit var btnTestRootAccess: Button
+    private lateinit var btnAccessibilitySetup: Button
+
     // Toast/Theme UI
     private lateinit var checkToastQuick: CheckBox
     private lateinit var checkToastPerApp: CheckBox
     private lateinit var checkToastDefault: CheckBox
     private lateinit var checkToastHoldKey: CheckBox
     private lateinit var spinnerTheme: Spinner
+
+    // Quick Toggle global (modes to cycle + single-match fallback)
+    private lateinit var checkQuickToggleMouse: CheckBox
+    private lateinit var checkQuickToggleKeyboard: CheckBox
+    private lateinit var checkQuickToggleScroll: CheckBox
+    private lateinit var tvQuickToggleFallbackLabel: TextView
+    private lateinit var spinnerQuickToggleFallback: Spinner
 
     // Auto keyboard for text input
     private lateinit var checkAutoKeyboardText: CheckBox
@@ -65,6 +78,7 @@ class SettingsActivity : AppCompatActivity() {
 
     // Updates
     private lateinit var btnCheckUpdates: Button
+    private lateinit var tvViewOnGitHub: TextView
 
     // Exclusions
     private lateinit var btnAddExcludedApps: Button
@@ -74,6 +88,12 @@ class SettingsActivity : AppCompatActivity() {
 
     private lateinit var excludedAdapter: ExcludedAppsAdapter
     private var allExcludedItems: List<ExcludedAppItem> = emptyList()
+
+    // Setup prefs (root granted flag)
+    private val setupPrefs by lazy { getSharedPreferences(SETUP_PREFS, MODE_PRIVATE) }
+
+    // Wizard dialog guard
+    private var wizardDialogShowing = false
 
     private val themeOptions = listOf(
         ThemePref.FOLLOW_SYSTEM,
@@ -113,6 +133,18 @@ class SettingsActivity : AppCompatActivity() {
         "Scroll wheel"
     )
 
+    private val quickToggleFallbackOptions = listOf(
+        Mode.MOUSE,
+        Mode.KEYBOARD,
+        Mode.SCROLL_WHEEL
+    )
+
+    private val quickToggleFallbackLabels = listOf(
+        "Mouse",
+        "Keyboard",
+        "Scroll wheel"
+    )
+
     private var suppressUiListeners = false
 
     private val backupCreateLauncher =
@@ -124,10 +156,6 @@ class SettingsActivity : AppCompatActivity() {
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri != null) handleRestoreOpen(uri)
         }
-
-    companion object {
-        private const val TAG_VIEW_ON_GITHUB_LINK = "view_on_github_link"
-    }
 
     private fun getAppVersionName(): String {
         return try {
@@ -156,12 +184,23 @@ class SettingsActivity : AppCompatActivity() {
         tvSettingsVersion = findViewById(R.id.tvSettingsVersion)
         tvSettingsVersion.text = "v${getAppVersionName()}"
 
+        // Initial setup buttons
+        btnTestRootAccess = findViewById(R.id.btnTestRootAccess)
+        btnAccessibilitySetup = findViewById(R.id.btnAccessibilitySetup)
+
         // Toast + theme
         checkToastQuick = findViewById(R.id.checkToastQuick)
         checkToastPerApp = findViewById(R.id.checkToastPerApp)
         checkToastDefault = findViewById(R.id.checkToastDefault)
         checkToastHoldKey = findViewById(R.id.checkToastHoldKey)
         spinnerTheme = findViewById(R.id.spinnerTheme)
+
+        // Quick Toggle settings
+        checkQuickToggleMouse = findViewById(R.id.checkQuickToggleMouse)
+        checkQuickToggleKeyboard = findViewById(R.id.checkQuickToggleKeyboard)
+        checkQuickToggleScroll = findViewById(R.id.checkQuickToggleScroll)
+        tvQuickToggleFallbackLabel = findViewById(R.id.tvQuickToggleFallbackLabel)
+        spinnerQuickToggleFallback = findViewById(R.id.spinnerQuickToggleFallback)
 
         // Auto keyboard
         checkAutoKeyboardText = findViewById(R.id.checkAutoKeyboardText)
@@ -193,6 +232,8 @@ class SettingsActivity : AppCompatActivity() {
 
         // Updates
         btnCheckUpdates = findViewById(R.id.btnCheckUpdates)
+        tvViewOnGitHub = findViewById(R.id.tvViewOnGitHub)
+
         setupUpdateChecker()
         setupViewOnGitHubLink()
 
@@ -202,7 +243,10 @@ class SettingsActivity : AppCompatActivity() {
         editSearchExcluded = findViewById(R.id.editSearchExcluded)
         btnResetExcluded = findViewById(R.id.btnResetExcluded)
 
+        setupInitialSetupSection()
+
         setupToasts()
+        setupQuickToggleSettings()
         setupThemeSpinner()
         setupBackupRestore()
         setupAutoKeyboardForText()
@@ -214,6 +258,11 @@ class SettingsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshUiFromPrefs()
+        updateAccessibilitySetupButton()
+
+        // If user is in the middle of the step-by-step wizard, continue it here too.
+        maybeContinueAccessibilityWizard()
+        updateAccessibilitySetupButton()
     }
 
     private fun refreshUiFromPrefs() {
@@ -226,6 +275,20 @@ class SettingsActivity : AppCompatActivity() {
             checkToastPerApp.isChecked = prefs.isToastPerAppEnabled()
             checkToastDefault.isChecked = prefs.isToastDefaultModeEnabled()
             checkToastHoldKey.isChecked = prefs.isToastHoldKeyEnabled()
+
+            // Quick Toggle global modes
+            val qt = prefs.getGlobalQuickToggleModes()
+            checkQuickToggleMouse.isChecked = qt.contains(Mode.MOUSE)
+            checkQuickToggleKeyboard.isChecked = qt.contains(Mode.KEYBOARD)
+            checkQuickToggleScroll.isChecked = qt.contains(Mode.SCROLL_WHEEL)
+
+            // Quick Toggle fallback
+            val fallback = prefs.getGlobalQuickToggleSingleMatchFallbackMode()
+            val fbIdx = quickToggleFallbackOptions.indexOf(fallback).coerceAtLeast(0)
+            if (spinnerQuickToggleFallback.selectedItemPosition != fbIdx) {
+                spinnerQuickToggleFallback.setSelection(fbIdx, false)
+            }
+            updateQuickToggleFallbackEnabledState(qt.size)
 
             // Theme
             val currentTheme = prefs.getThemePref()
@@ -280,7 +343,483 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    // ---------- Toast & Theme ----------
+    // ---------- Initial Setup section ----------
+
+    private fun setupInitialSetupSection() {
+        btnTestRootAccess.setOnClickListener { runRootTestInteractive() }
+
+        btnAccessibilitySetup.setOnClickListener {
+            // If not enabled, start the 3-step wizard.
+            if (!isAccessibilityServiceEnabled()) {
+                beginAccessibilityWizard()
+            }
+        }
+
+        updateAccessibilitySetupButton()
+    }
+
+    private fun updateAccessibilitySetupButton() {
+        val enabled = isAccessibilityServiceEnabled()
+        if (enabled) {
+            btnAccessibilitySetup.isEnabled = false
+            btnAccessibilitySetup.text = "Accessibility Service enabled ✅"
+            btnAccessibilitySetup.alpha = 0.7f
+        } else {
+            btnAccessibilitySetup.isEnabled = true
+            btnAccessibilitySetup.text = "Enable Accessibility Service"
+            btnAccessibilitySetup.alpha = 1.0f
+        }
+    }
+
+    // ---------- Accessibility step-by-step wizard (shared with MainActivity) ----------
+
+    private fun getA11yWizardStep(): Int {
+        val sp = getSharedPreferences(SHARED_PREFS_NAME, MODE_PRIVATE)
+        return sp.getInt(KEY_A11Y_WIZARD_STEP, 0)
+    }
+
+    private fun setA11yWizardStep(step: Int) {
+        val sp = getSharedPreferences(SHARED_PREFS_NAME, MODE_PRIVATE)
+        sp.edit().putInt(KEY_A11Y_WIZARD_STEP, step).apply()
+    }
+
+    private fun cancelAccessibilityWizard() {
+        setA11yWizardStep(0)
+    }
+
+    private fun beginAccessibilityWizard() {
+        setA11yWizardStep(1)
+        showAccessibilityWizardStep1()
+    }
+
+    private fun maybeContinueAccessibilityWizard(): Boolean {
+        if (wizardDialogShowing) return true
+
+        val step = getA11yWizardStep()
+        if (step == 0) return false
+
+        if (isAccessibilityServiceEnabled()) {
+            cancelAccessibilityWizard()
+            return false
+        }
+
+        when (step) {
+            1 -> showAccessibilityWizardStep1()
+            2 -> showAccessibilityWizardStep2()
+            3 -> showAccessibilityWizardStep3()
+            4 -> showAccessibilityWizardStillNotEnabled()
+            else -> cancelAccessibilityWizard()
+        }
+        return true
+    }
+
+    private fun showAccessibilityWizardStep1() {
+        if (wizardDialogShowing) return
+        wizardDialogShowing = true
+
+        val msg =
+            "Step 1 of 3\n\n" +
+                    "• Open Accessibility settings\n" +
+                    "• Tap “Q25 Trackpad Customizer” (will be grayed out)\n" +
+                    "• You’ll see a “Restricted setting” message\n" +
+                    "• Come back here (just hit Back)\n\n" +
+                    "Already saw the restricted message? You can jump to App info."
+
+        showScrollableDialog(
+            title = "Enable Accessibility",
+            message = msg,
+            positiveText = "Open Accessibility Settings",
+            onPositive = {
+                setA11yWizardStep(2)
+                openAccessibilitySettings()
+            },
+            neutralText = "Open App Info",
+            onNeutral = {
+                setA11yWizardStep(3)
+                openAppDetailsSettings()
+            },
+            negativeText = "Not now",
+            onNegative = { cancelAccessibilityWizard() }
+        ) {
+            wizardDialogShowing = false
+        }
+    }
+
+    private fun showAccessibilityWizardStep2() {
+        if (wizardDialogShowing) return
+        wizardDialogShowing = true
+
+        val msg =
+            "Step 2 of 3\n\n" +
+                    "Now allow restricted settings for this app:\n" +
+                    "• In App info (Next screen), tap the ⋮ menu (top-right)\n" +
+                    "• Tap “Allow restricted settings”\n" +
+                    "• Enter your PIN/passcode, then return here (Press Back button)\n\n" +
+                    "Don’t see the ⋮ menu? You probably missed step 1 - go back and tap the app in Accessibility first."
+
+        showScrollableDialog(
+            title = "Allow restricted settings",
+            message = msg,
+            positiveText = "Open App Info",
+            onPositive = {
+                setA11yWizardStep(3)
+                openAppDetailsSettings()
+            },
+            neutralText = "Back to Accessibility",
+            onNeutral = {
+                setA11yWizardStep(2)
+                openAccessibilitySettings()
+            },
+            negativeText = "Not now",
+            onNegative = { cancelAccessibilityWizard() }
+        ) {
+            wizardDialogShowing = false
+        }
+    }
+
+    private fun showAccessibilityWizardStep3() {
+        if (wizardDialogShowing) return
+        wizardDialogShowing = true
+
+        val msg =
+            "Step 3 of 3\n\n" +
+                    "Go back to Accessibility and enable the service:\n" +
+                    "Settings > Accessibility > Q25 Trackpad Customizer > Enable\n\n" +
+                    "Still grayed out? Go back to App info and double-check “Allow restricted settings” is enabled."
+
+        showScrollableDialog(
+            title = "Enable the service",
+            message = msg,
+            positiveText = "Open Accessibility Settings",
+            onPositive = {
+                setA11yWizardStep(4)
+                openAccessibilitySettings()
+            },
+            neutralText = "Open App Info",
+            onNeutral = {
+                setA11yWizardStep(3)
+                openAppDetailsSettings()
+            },
+            negativeText = "Not now",
+            onNegative = { cancelAccessibilityWizard() }
+        ) {
+            wizardDialogShowing = false
+        }
+    }
+
+    private fun showAccessibilityWizardStillNotEnabled() {
+        if (wizardDialogShowing) return
+        wizardDialogShowing = true
+
+        val msg =
+            "It looks like the Accessibility service is still OFF.\n\n" +
+                    "Go back and make sure “Q25 Trackpad Customizer” is enabled in Accessibility.\n\n" +
+                    "If it’s still grayed out, re-check App info > ⋮ > Allow restricted settings."
+
+        showScrollableDialog(
+            title = "Almost there",
+            message = msg,
+            positiveText = "Open Accessibility Settings",
+            onPositive = {
+                setA11yWizardStep(4)
+                openAccessibilitySettings()
+            },
+            neutralText = "Open App Info",
+            onNeutral = {
+                setA11yWizardStep(3)
+                openAppDetailsSettings()
+            },
+            negativeText = "Not now",
+            onNegative = { cancelAccessibilityWizard() }
+        ) {
+            wizardDialogShowing = false
+        }
+    }
+
+    private fun showScrollableDialog(
+        title: String,
+        message: String,
+        positiveText: String,
+        onPositive: (() -> Unit)?,
+        neutralText: String? = null,
+        onNeutral: (() -> Unit)? = null,
+        negativeText: String = "Close",
+        onNegative: (() -> Unit)? = null,
+        onDismiss: (() -> Unit)? = null
+    ) {
+        val scroll = ScrollView(this).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(14), dp(18), dp(6))
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        val tv = TextView(this).apply {
+            text = message
+            textSize = 14f
+        }
+
+        container.addView(tv)
+        scroll.addView(container)
+
+        val b = AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(scroll)
+            .setPositiveButton(positiveText) { d, _ ->
+                d.dismiss()
+                onPositive?.invoke()
+            }
+            .setNegativeButton(negativeText) { d, _ ->
+                d.dismiss()
+                onNegative?.invoke()
+            }
+            .setOnDismissListener { onDismiss?.invoke() }
+
+        if (!neutralText.isNullOrBlank()) {
+            b.setNeutralButton(neutralText) { d, _ ->
+                d.dismiss()
+                onNeutral?.invoke()
+            }
+        }
+
+        b.show()
+    }
+
+    private fun openAccessibilitySettings() {
+        try {
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        } catch (_: Exception) {
+            Toast.makeText(this, "Could not open Accessibility settings.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun openAppDetailsSettings() {
+        try {
+            val uri = Uri.parse("package:$packageName")
+            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, uri))
+        } catch (_: Exception) {
+            Toast.makeText(this, "Could not open app settings.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    // ---------- Root test (su -c id) ----------
+
+    private fun runRootTestInteractive() {
+        val progress = showSimpleProgressDialog(
+            title = "Checking root…",
+            message = "Requesting root access (su -c id). If Magisk/KernelSU prompts you, tap Allow/Grant."
+        )
+
+        Thread {
+            val result = testRootAccessDetailed()
+            Handler(Looper.getMainLooper()).post {
+                try { progress.dismiss() } catch (_: Exception) {}
+
+                setupPrefs.edit().putBoolean(KEY_ROOT_GRANTED, result.granted).apply()
+
+                val mgr = detectRootManager()
+                val mgrLine = when (mgr) {
+                    RootManager.MAGISK -> "Magisk detected."
+                    RootManager.KERNELSU -> "KernelSU detected."
+                    RootManager.UNKNOWN -> "Root manager not detected, or hidden (such as KernelSU)."
+                }
+
+                val msg = buildString {
+                    append(if (result.granted) "✅ Root access granted.\n\n" else "❌ Root access NOT granted.\n\n")
+                    append(mgrLine)
+                    append("\n\n")
+                    append(
+                        when {
+                            result.granted -> "You’re good to go."
+                            else -> rootTroubleshootingText(mgr)
+                        }
+                    )
+                }
+
+                val otherHelpLabel = when (mgr) {
+                    RootManager.MAGISK -> "Using KernelSU instead?"
+                    RootManager.KERNELSU -> "Using Magisk instead?"
+                    RootManager.UNKNOWN -> "More help"
+                }
+
+                showScrollableDialog(
+                    title = "Root access",
+                    message = msg,
+                    positiveText = "OK",
+                    onPositive = null,
+                    neutralText = otherHelpLabel,
+                    onNeutral = { showRootHelpDialog() },
+                    negativeText = "Close",
+                    onNegative = null
+                )
+            }
+        }.start()
+    }
+
+    private data class RootTestResult(
+        val granted: Boolean,
+        val exitCode: Int,
+        val stdout: String,
+        val stderr: String,
+        val error: String? = null
+    )
+
+    private fun testRootAccessDetailed(): RootTestResult {
+        return try {
+            val pb = ProcessBuilder("su", "-c", "id")
+            val p = pb.start()
+
+            val stdout = p.inputStream.bufferedReader().use { it.readText() }.trim()
+            val stderr = p.errorStream.bufferedReader().use { it.readText() }.trim()
+            val exit = p.waitFor()
+
+            val ok = (exit == 0 && stdout.contains("uid=0"))
+            RootTestResult(
+                granted = ok,
+                exitCode = exit,
+                stdout = stdout,
+                stderr = stderr
+            )
+        } catch (e: Exception) {
+            RootTestResult(
+                granted = false,
+                exitCode = -1,
+                stdout = "",
+                stderr = "",
+                error = e.message
+            )
+        }
+    }
+
+    private enum class RootManager { MAGISK, KERNELSU, UNKNOWN }
+
+    private fun detectRootManager(): RootManager {
+        val pm = packageManager
+
+        val hasMagisk =
+            isPackageInstalled(pm, "com.topjohnwu.magisk") ||
+                    isPackageInstalled(pm, "io.github.vvb2060.magisk")
+
+        val hasKernelSu =
+            isPackageInstalled(pm, "me.weishu.kernelsu")
+
+        return when {
+            hasKernelSu -> RootManager.KERNELSU
+            hasMagisk -> RootManager.MAGISK
+            else -> RootManager.UNKNOWN
+        }
+    }
+
+    private fun isPackageInstalled(pm: PackageManager, pkg: String): Boolean {
+        return try {
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
+                pm.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getPackageInfo(pkg, 0)
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun rootTroubleshootingText(mgr: RootManager): String {
+        val managerHint = when (mgr) {
+            RootManager.MAGISK -> "Open Magisk > Superuser, find this app, and allow it."
+            RootManager.KERNELSU -> "Open KernelSU > Superuser, find this app, and allow it."
+            RootManager.UNKNOWN -> "Open your root manager’s Superuser list and allow this app."
+        }
+
+        return """
+If you didn’t see a prompt, or you previously denied it:
+
+• $managerHint
+• Then tap “Test / Grant Root Access” again.
+
+(If root is disabled/unavailable, mode switching won’t work.)
+""".trim()
+    }
+
+    private fun showRootHelpDialog() {
+        showScrollableDialog(
+            title = "Root help",
+            message = """
+This app requests root by running:
+su -c id
+
+• Magisk: you should get a prompt the first time. If you denied it before, enable it in Magisk > Superuser.
+• KernelSU: enable it in KernelSU > Superuser.
+
+If you’re using something else, look for a “Superuser / SU” permission list and allow this app there.
+""".trim(),
+            positiveText = "OK",
+            onPositive = null,
+            negativeText = "Close",
+            onNegative = null
+        )
+    }
+
+    private fun showSimpleProgressDialog(title: String, message: String): AlertDialog {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(48, 32, 48, 32)
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        val bar = ProgressBar(this).apply { isIndeterminate = true }
+        val tv = TextView(this).apply {
+            text = message
+            setPadding(32, 0, 0, 0)
+        }
+
+        container.addView(bar)
+        container.addView(tv)
+
+        return AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(container)
+            .setCancelable(false)
+            .create()
+            .also { it.show() }
+    }
+
+    private fun isAccessibilityServiceEnabled(): Boolean {
+        val enabled = try {
+            Settings.Secure.getInt(contentResolver, Settings.Secure.ACCESSIBILITY_ENABLED, 0) == 1
+        } catch (_: Exception) {
+            false
+        }
+        if (!enabled) return false
+
+        val enabledServices = Settings.Secure.getString(
+            contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+
+        // Prefer exact service component match, but also allow "packageName/" style entries as fallback.
+        val component = ComponentName(this, AppSwitchService::class.java).flattenToString()
+        return enabledServices.split(':').any { entry ->
+            entry.equals(component, ignoreCase = true) ||
+                    entry.startsWith("$packageName/") ||
+                    entry.contains(packageName)
+        }
+    }
+
+    // ---------- Toast ----------
 
     private fun setupToasts() {
         checkToastQuick.isChecked = prefs.isToastQuickToggleEnabled()
@@ -305,6 +844,88 @@ class SettingsActivity : AppCompatActivity() {
             prefs.setToastHoldKeyEnabled(isChecked)
         }
     }
+
+    // ---------- Quick Toggle ----------
+
+    private fun setupQuickToggleSettings() {
+        val fbAdapter = ArrayAdapter(this, AndroidR.layout.simple_spinner_item, quickToggleFallbackLabels)
+        fbAdapter.setDropDownViewResource(AndroidR.layout.simple_spinner_dropdown_item)
+        spinnerQuickToggleFallback.adapter = fbAdapter
+
+        fun selectedQuickToggleModesFromUi(): Set<Mode> {
+            val out = LinkedHashSet<Mode>()
+            if (checkQuickToggleMouse.isChecked) out.add(Mode.MOUSE)
+            if (checkQuickToggleKeyboard.isChecked) out.add(Mode.KEYBOARD)
+            if (checkQuickToggleScroll.isChecked) out.add(Mode.SCROLL_WHEEL)
+            return out
+        }
+
+        fun applyQuickToggleSelection(maybeRevert: (() -> Unit)? = null) {
+            val selected = selectedQuickToggleModesFromUi()
+            if (selected.isEmpty()) {
+                maybeRevert?.invoke()
+                Toast.makeText(this, "Select at least one mode for Quick Toggle.", Toast.LENGTH_SHORT).show()
+                return
+            }
+            prefs.setGlobalQuickToggleModes(selected)
+            updateQuickToggleFallbackEnabledState(selected.size)
+        }
+
+        val qt = prefs.getGlobalQuickToggleModes()
+        suppressUiListeners = true
+        try {
+            checkQuickToggleMouse.isChecked = qt.contains(Mode.MOUSE)
+            checkQuickToggleKeyboard.isChecked = qt.contains(Mode.KEYBOARD)
+            checkQuickToggleScroll.isChecked = qt.contains(Mode.SCROLL_WHEEL)
+
+            val fallback = prefs.getGlobalQuickToggleSingleMatchFallbackMode()
+            spinnerQuickToggleFallback.setSelection(quickToggleFallbackOptions.indexOf(fallback).coerceAtLeast(0), false)
+            updateQuickToggleFallbackEnabledState(qt.size)
+        } finally {
+            suppressUiListeners = false
+        }
+
+        checkQuickToggleMouse.setOnCheckedChangeListener { _, _ ->
+            if (suppressUiListeners) return@setOnCheckedChangeListener
+            applyQuickToggleSelection(maybeRevert = {
+                suppressUiListeners = true
+                try { checkQuickToggleMouse.isChecked = true } finally { suppressUiListeners = false }
+            })
+        }
+        checkQuickToggleKeyboard.setOnCheckedChangeListener { _, _ ->
+            if (suppressUiListeners) return@setOnCheckedChangeListener
+            applyQuickToggleSelection(maybeRevert = {
+                suppressUiListeners = true
+                try { checkQuickToggleKeyboard.isChecked = true } finally { suppressUiListeners = false }
+            })
+        }
+        checkQuickToggleScroll.setOnCheckedChangeListener { _, _ ->
+            if (suppressUiListeners) return@setOnCheckedChangeListener
+            applyQuickToggleSelection(maybeRevert = {
+                suppressUiListeners = true
+                try { checkQuickToggleScroll.isChecked = true } finally { suppressUiListeners = false }
+            })
+        }
+
+        spinnerQuickToggleFallback.setOnItemSelectedListenerSimple { position ->
+            if (suppressUiListeners) return@setOnItemSelectedListenerSimple
+            val enabled = (prefs.getGlobalQuickToggleModes().size == 1)
+            if (!enabled) return@setOnItemSelectedListenerSimple
+            val selected = quickToggleFallbackOptions[position]
+            prefs.setGlobalQuickToggleSingleMatchFallbackMode(selected)
+        }
+    }
+
+    private fun updateQuickToggleFallbackEnabledState(selectedCount: Int) {
+        val enabled = (selectedCount == 1)
+
+        spinnerQuickToggleFallback.isEnabled = enabled
+        spinnerQuickToggleFallback.alpha = if (enabled) 1.0f else 0.5f
+
+        tvQuickToggleFallbackLabel.alpha = if (enabled) 1.0f else 0.5f
+    }
+
+    // ---------- Theme ----------
 
     private fun setupThemeSpinner() {
         val adapter = ArrayAdapter(this, AndroidR.layout.simple_spinner_item, themeLabels)
@@ -684,27 +1305,8 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun setupViewOnGitHubLink() {
-        val parent = btnCheckUpdates.parent as? ViewGroup ?: return
-        val existing = parent.findViewWithTag<ViewGroup>(TAG_VIEW_ON_GITHUB_LINK)
-        if (existing != null) return
-
-        val link = TextView(this).apply {
-            tag = TAG_VIEW_ON_GITHUB_LINK
-            text = "View on GitHub"
-            textSize = 12f
-            paintFlags = paintFlags or Paint.UNDERLINE_TEXT_FLAG
-            setPadding(0, dp(6), 0, dp(2))
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { openGitHubReleasePage() }
-        }
-
-        val idx = parent.indexOfChild(btnCheckUpdates)
-        if (idx >= 0 && idx < parent.childCount - 1) {
-            parent.addView(link, idx + 1)
-        } else {
-            parent.addView(link)
-        }
+        tvViewOnGitHub.paintFlags = tvViewOnGitHub.paintFlags or Paint.UNDERLINE_TEXT_FLAG
+        tvViewOnGitHub.setOnClickListener { openGitHubReleasePage() }
     }
 
     private fun openGitHubReleasePage() {
@@ -721,10 +1323,7 @@ class SettingsActivity : AppCompatActivity() {
             val result = UpdateChecker.fetchLatestRelease()
 
             Handler(Looper.getMainLooper()).post {
-                try {
-                    progress.dismiss()
-                } catch (_: Exception) {
-                }
+                try { progress.dismiss() } catch (_: Exception) {}
 
                 when (result) {
                     is UpdateChecker.Result.Error -> {
@@ -734,7 +1333,6 @@ class SettingsActivity : AppCompatActivity() {
                             .setPositiveButton("OK", null)
                             .show()
                     }
-
                     is UpdateChecker.Result.Success -> {
                         val latestTag = result.release.tagName
                         val latestDisplay = UpdateChecker.normalizeForDisplay(latestTag)
@@ -755,7 +1353,6 @@ class SettingsActivity : AppCompatActivity() {
                                     }
                                     .show()
                             }
-
                             cmp == 0 -> {
                                 AlertDialog.Builder(this)
                                     .setTitle("No update available")
@@ -770,7 +1367,6 @@ class SettingsActivity : AppCompatActivity() {
                                     }
                                     .show()
                             }
-
                             else -> {
                                 val openUrl = result.release.apkUrl ?: result.release.htmlUrl
                                 val openLabel = if (result.release.apkUrl != null) "Open APK download" else "Open release page"
@@ -960,5 +1556,14 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         return map.values.sortedBy { it.label.lowercase() }
+    }
+
+    companion object {
+        private const val SETUP_PREFS = "setup_state"
+        const val KEY_ROOT_GRANTED = "root_granted"
+
+        // Must match MainActivity wizard prefs/key
+        private const val SHARED_PREFS_NAME = "q25_prefs"
+        private const val KEY_A11Y_WIZARD_STEP = "a11y_wizard_step_v1"
     }
 }

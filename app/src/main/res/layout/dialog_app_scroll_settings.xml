@@ -19,6 +19,61 @@
             android:textSize="16sp"
             android:layout_marginBottom="8dp" />
 
+        <!-- QUICK TOGGLE (PER-APP) -->
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Quick toggle (for this app)"
+            android:textStyle="bold"
+            android:textSize="14sp"
+            android:layout_marginBottom="4dp" />
+
+        <CheckBox
+            android:id="@+id/checkAppQuickToggleUseGlobal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Use global Quick Toggle settings"
+            android:textSize="12sp"
+            android:layout_marginBottom="6dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="10dp">
+
+            <CheckBox
+                android:id="@+id/checkAppQuickToggleMouse"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Mouse"
+                android:textSize="12sp" />
+
+            <CheckBox
+                android:id="@+id/checkAppQuickToggleKeyboard"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Keyboard"
+                android:textSize="12sp" />
+
+            <CheckBox
+                android:id="@+id/checkAppQuickToggleScroll"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Scroll"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="?android:attr/listDivider"
+            android:layout_marginBottom="10dp" />
+
         <!-- PRIMARY HOLD (PER-APP) -->
 
         <TextView

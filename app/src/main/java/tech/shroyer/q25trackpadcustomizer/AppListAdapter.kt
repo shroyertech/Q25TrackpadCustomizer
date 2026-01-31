@@ -102,6 +102,12 @@ class AppListAdapter(
 
         val tvTitle = dialogView.findViewById<TextView>(R.id.tvScrollDialogTitle)
 
+        // Quick Toggle (per-app)
+        val checkQtUseGlobal = dialogView.findViewById<CheckBox>(R.id.checkAppQuickToggleUseGlobal)
+        val checkQtMouse = dialogView.findViewById<CheckBox>(R.id.checkAppQuickToggleMouse)
+        val checkQtKeyboard = dialogView.findViewById<CheckBox>(R.id.checkAppQuickToggleKeyboard)
+        val checkQtScroll = dialogView.findViewById<CheckBox>(R.id.checkAppQuickToggleScroll)
+
         // Scroll controls
         val tvScrollSensitivityLabel = dialogView.findViewById<TextView>(R.id.tvScrollSensitivityLabel)
         val spinnerSens = dialogView.findViewById<Spinner>(R.id.spinnerAppScrollSensitivity)
@@ -130,11 +136,101 @@ class AppListAdapter(
         tvTitle.text = "Settings for ${app.label}"
 
         val savedMode = prefs.getAppMode(app.packageName) ?: Mode.FOLLOW_SYSTEM
-        val effectiveMode = when (savedMode) {
+        val baseMode = when (savedMode) {
             Mode.MOUSE, Mode.KEYBOARD, Mode.SCROLL_WHEEL -> savedMode
             Mode.FOLLOW_SYSTEM -> prefs.getSystemDefaultMode()
         }
-        val isScrollEffective = (effectiveMode == Mode.SCROLL_WHEEL)
+        val isScrollEffective = (baseMode == Mode.SCROLL_WHEEL)
+
+        // ----- Quick Toggle (per-app) -----
+        val globalQt = prefs.getGlobalQuickToggleModes()
+        val qtOverride = prefs.getAppQuickToggleModesOverride(app.packageName) // null => follow global
+
+        var suppressQt = false
+        var pendingQtUseGlobal = (qtOverride == null)
+        val pendingQt = LinkedHashSet(qtOverride ?: globalQt)
+
+        fun applyQtSetToUi(set: Set<Mode>) {
+            suppressQt = true
+            try {
+                checkQtMouse.isChecked = set.contains(Mode.MOUSE)
+                checkQtKeyboard.isChecked = set.contains(Mode.KEYBOARD)
+                checkQtScroll.isChecked = set.contains(Mode.SCROLL_WHEEL)
+            } finally {
+                suppressQt = false
+            }
+        }
+
+        fun setQtEnabledState() {
+            val enabled = !pendingQtUseGlobal
+            val alpha = if (enabled) 1f else 0.5f
+            checkQtMouse.isEnabled = enabled
+            checkQtKeyboard.isEnabled = enabled
+            checkQtScroll.isEnabled = enabled
+            checkQtMouse.alpha = alpha
+            checkQtKeyboard.alpha = alpha
+            checkQtScroll.alpha = alpha
+        }
+
+        fun selectedQtFromUi(): LinkedHashSet<Mode> {
+            val out = LinkedHashSet<Mode>()
+            if (checkQtMouse.isChecked) out.add(Mode.MOUSE)
+            if (checkQtKeyboard.isChecked) out.add(Mode.KEYBOARD)
+            if (checkQtScroll.isChecked) out.add(Mode.SCROLL_WHEEL)
+            return out
+        }
+
+        fun syncPendingQtOrRevert(revert: () -> Unit) {
+            val sel = selectedQtFromUi()
+            if (sel.isEmpty()) {
+                revert()
+                Toast.makeText(context, "Select at least one Quick Toggle mode.", Toast.LENGTH_SHORT).show()
+                return
+            }
+            pendingQt.clear()
+            pendingQt.addAll(sel)
+        }
+
+        // Init QT UI
+        checkQtUseGlobal.isChecked = pendingQtUseGlobal
+        applyQtSetToUi(if (pendingQtUseGlobal) globalQt else pendingQt)
+        setQtEnabledState()
+
+        checkQtUseGlobal.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressQt) return@setOnCheckedChangeListener
+            pendingQtUseGlobal = isChecked
+            if (pendingQtUseGlobal) {
+                // Show global selection while disabled
+                applyQtSetToUi(globalQt)
+            } else {
+                // Start from current override (or global if none existed)
+                if (pendingQt.isEmpty()) pendingQt.addAll(globalQt)
+                applyQtSetToUi(pendingQt)
+            }
+            setQtEnabledState()
+        }
+
+        checkQtMouse.setOnCheckedChangeListener { _, _ ->
+            if (suppressQt || pendingQtUseGlobal) return@setOnCheckedChangeListener
+            syncPendingQtOrRevert {
+                suppressQt = true
+                try { checkQtMouse.isChecked = true } finally { suppressQt = false }
+            }
+        }
+        checkQtKeyboard.setOnCheckedChangeListener { _, _ ->
+            if (suppressQt || pendingQtUseGlobal) return@setOnCheckedChangeListener
+            syncPendingQtOrRevert {
+                suppressQt = true
+                try { checkQtKeyboard.isChecked = true } finally { suppressQt = false }
+            }
+        }
+        checkQtScroll.setOnCheckedChangeListener { _, _ ->
+            if (suppressQt || pendingQtUseGlobal) return@setOnCheckedChangeListener
+            syncPendingQtOrRevert {
+                suppressQt = true
+                try { checkQtScroll.isChecked = true } finally { suppressQt = false }
+            }
+        }
 
         // ----- Scroll wheel -----
         val sensLabels = listOf("Slow", "Medium", "Fast")
@@ -391,6 +487,19 @@ class AppListAdapter(
         val dialog = AlertDialog.Builder(context)
             .setView(dialogView)
             .setPositiveButton("Save") { d, _ ->
+
+                // Save Quick Toggle override
+                val finalQtOverride: Set<Mode>? = if (pendingQtUseGlobal) {
+                    null
+                } else {
+                    // If same as global, don't store override (acts like "follow global")
+                    val sel = LinkedHashSet(pendingQt)
+                    if (sel.isEmpty()) null else sel
+                }?.let { sel ->
+                    if (sel == prefs.getGlobalQuickToggleModes()) null else sel
+                }
+                prefs.setAppQuickToggleModesOverride(app.packageName, finalQtOverride)
+
                 if (isScrollEffective) {
                     val selSens = sensOptions[spinnerSens.selectedItemPosition]
                     prefs.setAppScrollSensitivity(app.packageName, selSens)

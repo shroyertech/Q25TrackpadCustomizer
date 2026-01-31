@@ -50,13 +50,6 @@ class Prefs(context: Context) {
         prefs.edit().putInt(keyAppMode(packageName), mode.prefValue).apply()
     }
 
-    fun clearAllAppModes() {
-        val editor = prefs.edit()
-        val keysToRemove = prefs.all.keys.filter { it.startsWith(PREFIX_APP_MODE) }
-        keysToRemove.forEach { editor.remove(it) }
-        editor.apply()
-    }
-
     // ---- Toast settings ----
 
     fun isToastQuickToggleEnabled(): Boolean = prefs.getBoolean(KEY_TOAST_QUICK_TOGGLE, true)
@@ -81,6 +74,79 @@ class Prefs(context: Context) {
 
     fun setToastHoldKeyEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_TOAST_HOLD_KEY, enabled).apply()
+    }
+
+    // ---- Quick Toggle mode selection (global + per-app overrides) ----
+    // Stored as a bitmask: MOUSE=1, KEYBOARD=2, SCROLL_WHEEL=4.
+
+    fun getGlobalQuickToggleModes(): Set<Mode> {
+        val mask = prefs.getInt(KEY_QUICK_TOGGLE_MODES_GLOBAL, QUICK_TOGGLE_DEFAULT_MASK)
+        val set = maskToQuickToggleModes(mask)
+        return if (set.isEmpty()) maskToQuickToggleModes(QUICK_TOGGLE_DEFAULT_MASK) else set
+    }
+
+    fun setGlobalQuickToggleModes(modes: Set<Mode>) {
+        val sanitized = sanitizeQuickToggleModes(modes)
+        val final = if (sanitized.isEmpty()) maskToQuickToggleModes(QUICK_TOGGLE_DEFAULT_MASK) else sanitized
+        prefs.edit().putInt(KEY_QUICK_TOGGLE_MODES_GLOBAL, quickToggleModesToMask(final)).apply()
+    }
+
+    /**
+     * Per-app override set for quick toggle modes, or null if not set.
+     * Empty/invalid masks are treated as "not set".
+     */
+    fun getAppQuickToggleModesOverride(packageName: String?): Set<Mode>? {
+        if (packageName.isNullOrEmpty()) return null
+        val key = keyQuickToggleModesPkg(packageName)
+        if (!prefs.contains(key)) return null
+        val mask = prefs.getInt(key, 0)
+        val set = maskToQuickToggleModes(mask)
+        return if (set.isEmpty()) null else set
+    }
+
+    fun setAppQuickToggleModesOverride(packageName: String, overrideModes: Set<Mode>?) {
+        val key = keyQuickToggleModesPkg(packageName)
+        prefs.edit().apply {
+            if (overrideModes == null) {
+                remove(key)
+            } else {
+                val sanitized = sanitizeQuickToggleModes(overrideModes)
+                if (sanitized.isEmpty()) remove(key)
+                else putInt(key, quickToggleModesToMask(sanitized))
+            }
+        }.apply()
+    }
+
+    /**
+     * Effective quick toggle mode set (app override if present, else global),
+     * clamped to at least one option.
+     */
+    fun getEffectiveQuickToggleModes(packageName: String?): Set<Mode> {
+        val raw = getAppQuickToggleModesOverride(packageName) ?: getGlobalQuickToggleModes()
+        val sanitized = sanitizeQuickToggleModes(raw)
+        return if (sanitized.isNotEmpty()) sanitized else getGlobalQuickToggleModes()
+    }
+
+    /**
+     * Global fallback used only when:
+     * - user selected exactly 1 quick toggle mode
+     * - and that selection equals the app's base mode
+     */
+    fun getGlobalQuickToggleSingleMatchFallbackMode(): Mode {
+        val value = prefs.getInt(KEY_QUICK_TOGGLE_SINGLE_MATCH_FALLBACK, Mode.MOUSE.prefValue)
+        val m = Mode.fromPrefValue(value)
+        return when (m) {
+            Mode.MOUSE, Mode.KEYBOARD, Mode.SCROLL_WHEEL -> m
+            else -> Mode.MOUSE
+        }
+    }
+
+    fun setGlobalQuickToggleSingleMatchFallbackMode(mode: Mode) {
+        val safe = when (mode) {
+            Mode.MOUSE, Mode.KEYBOARD, Mode.SCROLL_WHEEL -> mode
+            else -> Mode.MOUSE
+        }
+        prefs.edit().putInt(KEY_QUICK_TOGGLE_SINGLE_MATCH_FALLBACK, safe.prefValue).apply()
     }
 
     // ---- Auto keyboard on text input (global + per-app) ----
@@ -396,19 +462,6 @@ class Prefs(context: Context) {
         return getAppHold2UseHold1DoublePressHoldOverride(packageName) ?: isGlobalHold2UseHold1DoublePressHold()
     }
 
-    /**
-     * Convenience helper: what physical keycode should AppSwitchService watch to initiate Secondary Hold?
-     * - If Secondary Hold is tied to Primary Hold double-press+hold => return Primary Hold keycode (effective)
-     * - Else => return Secondary Hold keycode (effective)
-     */
-    fun getEffectiveHold2TriggerKeyCode(packageName: String?): Int {
-        return if (isEffectiveHold2UseHold1DoublePressHold(packageName)) {
-            getEffectiveHoldKeyCode(packageName) // Primary Hold key
-        } else {
-            getEffectiveHold2KeyCode(packageName) // Secondary Hold key
-        }
-    }
-
     // ---- Theme ----
 
     fun getThemePref(): ThemePref {
@@ -547,6 +600,40 @@ class Prefs(context: Context) {
         prefs.edit().putBoolean(keyScrollAppInvH(packageName), invert).apply()
     }
 
+    // ---- Internal helpers ----
+
+    private fun sanitizeQuickToggleModes(modes: Set<Mode>): Set<Mode> {
+        val out = LinkedHashSet<Mode>()
+        for (m in modes) {
+            when (m) {
+                Mode.MOUSE, Mode.KEYBOARD, Mode.SCROLL_WHEEL -> out.add(m)
+                else -> Unit
+            }
+        }
+        return out
+    }
+
+    private fun quickToggleModesToMask(modes: Set<Mode>): Int {
+        var mask = 0
+        for (m in modes) {
+            mask = mask or when (m) {
+                Mode.MOUSE -> QUICK_TOGGLE_MASK_MOUSE
+                Mode.KEYBOARD -> QUICK_TOGGLE_MASK_KEYBOARD
+                Mode.SCROLL_WHEEL -> QUICK_TOGGLE_MASK_SCROLL
+                else -> 0
+            }
+        }
+        return mask
+    }
+
+    private fun maskToQuickToggleModes(mask: Int): Set<Mode> {
+        val out = LinkedHashSet<Mode>()
+        if ((mask and QUICK_TOGGLE_MASK_MOUSE) != 0) out.add(Mode.MOUSE)
+        if ((mask and QUICK_TOGGLE_MASK_KEYBOARD) != 0) out.add(Mode.KEYBOARD)
+        if ((mask and QUICK_TOGGLE_MASK_SCROLL) != 0) out.add(Mode.SCROLL_WHEEL)
+        return out
+    }
+
     companion object {
         private const val PREFS_NAME = "q25_prefs"
 
@@ -560,6 +647,17 @@ class Prefs(context: Context) {
         private const val KEY_TOAST_PER_APP = "toast_per_app"
         private const val KEY_TOAST_DEFAULT_MODE = "toast_default_mode"
         private const val KEY_TOAST_HOLD_KEY = "toast_hold_key"
+
+        // Quick Toggle selection
+        private const val KEY_QUICK_TOGGLE_MODES_GLOBAL = "quick_toggle_modes_global"
+        private const val KEY_QUICK_TOGGLE_SINGLE_MATCH_FALLBACK = "quick_toggle_single_match_fallback"
+        private fun keyQuickToggleModesPkg(pkg: String) = "quick_toggle_modes_pkg_$pkg"
+
+        private const val QUICK_TOGGLE_MASK_MOUSE = 1
+        private const val QUICK_TOGGLE_MASK_KEYBOARD = 2
+        private const val QUICK_TOGGLE_MASK_SCROLL = 4
+        private const val QUICK_TOGGLE_DEFAULT_MASK =
+            QUICK_TOGGLE_MASK_MOUSE or QUICK_TOGGLE_MASK_KEYBOARD or QUICK_TOGGLE_MASK_SCROLL
 
         private const val KEY_AUTO_KEYBOARD_FOR_TEXT_GLOBAL = "auto_keyboard_for_text"
         private fun keyAutoKeyboardForTextPkg(pkg: String) = "auto_keyboard_for_text_pkg_$pkg"
@@ -621,7 +719,7 @@ class Prefs(context: Context) {
             "com.google.android.inputmethod.latin", // Gboard
             "com.touchtype.swiftkey",            // SwiftKey
             "it.srik.TypeQ25",                  // TypeQ25
-            "com.duc1607.q25keyboard"           //Dave's Q25 Keyboard
+            "com.duc1607.q25keyboard"           // Dave's Q25 Keyboard
         )
 
         fun applyThemeFromPrefs(context: Context) {
