@@ -35,21 +35,31 @@ class QuickToggleActivity : Activity() {
             singleMatchFallback = singleMatchFallback
         )
 
-        val success = TrackpadController.setModeValue(nextMode)
+        // Update logical state right away and write the hardware in the background, so this
+        // (invisible) activity never blocks on root. Explicit user action: retry root now even
+        // if a previous attempt failed recently.
+        val previousMode = AppState.currentMode
+        AppState.currentMode = nextMode
+        prefs.setLastKnownMode(nextMode)
 
-        if (!success) {
-            NotificationHelper.showRootError(
-                this,
-                "Trackpad toggle failed (root error). Please grant root access."
-            )
-        } else {
-            NotificationHelper.clearRootError(this)
-
-            AppState.currentMode = nextMode
-            prefs.setLastKnownMode(nextMode)
-
-            if (prefs.isToastQuickToggleEnabled()) {
-                ToastHelper.show(this, "Toggled to ${modeLabel(nextMode)} Mode!")
+        val appContext = applicationContext
+        val showToast = prefs.isToastQuickToggleEnabled()
+        RootShell.resetBackoff()
+        TrackpadController.requestMode(nextMode) { ok ->
+            if (ok) {
+                NotificationHelper.clearRootError(appContext)
+                if (showToast) {
+                    ToastHelper.show(appContext, "Toggled to ${modeLabel(nextMode)} Mode!")
+                }
+            } else {
+                if (AppState.currentMode == nextMode) {
+                    AppState.currentMode = previousMode
+                    prefs.setLastKnownMode(previousMode)
+                }
+                NotificationHelper.showRootError(
+                    appContext,
+                    "Trackpad toggle failed (root error). Please grant root access."
+                )
             }
         }
 

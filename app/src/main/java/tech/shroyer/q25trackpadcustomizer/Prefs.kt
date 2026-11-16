@@ -50,6 +50,14 @@ class Prefs(context: Context) {
         prefs.edit().putInt(keyAppMode(packageName), mode.prefValue).apply()
     }
 
+    /** Set the same mode for many apps in a single write. */
+    fun setAppModes(packageNames: Collection<String>, mode: Mode) {
+        if (packageNames.isEmpty()) return
+        val editor = prefs.edit()
+        for (pkg in packageNames) editor.putInt(keyAppMode(pkg), mode.prefValue)
+        editor.apply()
+    }
+
     // ---- Toast settings ----
 
     fun isToastQuickToggleEnabled(): Boolean = prefs.getBoolean(KEY_TOAST_QUICK_TOGGLE, true)
@@ -486,6 +494,16 @@ class Prefs(context: Context) {
         }
     }
 
+    /**
+     * Allocation-free exclusion check for hot paths (accessibility events).
+     * Does not copy the stored set like [getExcludedPackages] does.
+     */
+    fun isExcluded(packageName: String?): Boolean {
+        if (packageName.isNullOrEmpty()) return false
+        val stored = prefs.getStringSet(KEY_EXCLUDED_PACKAGES, null)
+        return stored?.contains(packageName) ?: DEFAULT_EXCLUDED_PACKAGES.contains(packageName)
+    }
+
     fun addExcludedPackage(packageName: String) {
         val set = HashSet(getExcludedPackages())
         if (set.add(packageName)) {
@@ -538,10 +556,14 @@ class Prefs(context: Context) {
 
     // ---- Per-app scroll settings ----
 
+    // Checks the four known keys directly. (Previously this copied the entire prefs map
+    // via prefs.all on every scroll key press, and the suffix match could also hit
+    // packages whose name merely ended with "_<packageName>".)
     private fun hasAnyAppScrollSettings(packageName: String): Boolean {
-        return prefs.all.keys.any { key ->
-            key.startsWith(PREFIX_SCROLL_APP) && key.endsWith("_$packageName")
-        }
+        return prefs.contains(keyScrollAppSens(packageName)) ||
+                prefs.contains(keyScrollAppHorizontal(packageName)) ||
+                prefs.contains(keyScrollAppInvV(packageName)) ||
+                prefs.contains(keyScrollAppInvH(packageName))
     }
 
     fun getAppScrollSettings(packageName: String): ScrollSettings? {
@@ -700,7 +722,6 @@ class Prefs(context: Context) {
         private const val KEY_SCROLL_GLOBAL_INV_V = "scroll_global_inv_v"
         private const val KEY_SCROLL_GLOBAL_INV_H = "scroll_global_inv_h"
 
-        private const val PREFIX_SCROLL_APP = "scroll_app_"
         private fun keyScrollAppSens(pkg: String) = "scroll_app_sens_$pkg"
         private fun keyScrollAppHorizontal(pkg: String) = "scroll_app_horizontal_$pkg"
         private fun keyScrollAppInvV(pkg: String) = "scroll_app_inv_v_$pkg"
@@ -717,9 +738,7 @@ class Prefs(context: Context) {
             // Popular keyboards
             "com.blackberry.keyboard",
             "com.google.android.inputmethod.latin", // Gboard
-            "com.touchtype.swiftkey",            // SwiftKey
-            "it.srik.TypeQ25",                  // TypeQ25
-            "com.duc1607.q25keyboard"           // Dave's Q25 Keyboard
+            "com.touchtype.swiftkey"             // SwiftKey
         )
 
         fun applyThemeFromPrefs(context: Context) {

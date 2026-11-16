@@ -674,6 +674,9 @@ class SettingsActivity : AppCompatActivity() {
     )
 
     private fun testRootAccessDetailed(): RootTestResult {
+        // The user is (re)checking root, possibly after granting it: let mode switches retry now.
+        RootShell.resetBackoff()
+
         return try {
             val pb = ProcessBuilder("su", "-c", "id")
             val p = pb.start()

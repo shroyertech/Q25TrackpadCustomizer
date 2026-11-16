@@ -41,6 +41,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var appListAdapter: AppListAdapter
     private var allApps: List<AppItem> = emptyList()
 
+    // App list loading runs off the main thread; the generation counter drops stale results.
+    private var appListLoadGeneration = 0
+
     private val systemDefaultOptions = listOf(
         Mode.MOUSE,
         Mode.KEYBOARD,
@@ -202,15 +205,28 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupAppList() {
         recyclerApps.layoutManager = LinearLayoutManager(this)
-        allApps = loadLaunchableApps()
+        // Starts empty; onResume() fills it (previously the list, including every icon, was
+        // loaded on the main thread here and then loaded again in onResume).
         appListAdapter = AppListAdapter(this, allApps, prefs)
         recyclerApps.adapter = appListAdapter
     }
 
     private fun refreshAppList(currentQuery: String) {
-        allApps = loadLaunchableApps()
-        appListAdapter.updateApps(allApps)
-        appListAdapter.filter(currentQuery)
+        val generation = ++appListLoadGeneration
+        Thread {
+            val apps = try {
+                loadLaunchableApps()
+            } catch (_: Exception) {
+                null
+            }
+            runOnUiThread {
+                if (apps == null || generation != appListLoadGeneration) return@runOnUiThread
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                allApps = apps
+                appListAdapter.updateApps(apps)
+                appListAdapter.filter(editSearch.text?.toString() ?: currentQuery)
+            }
+        }.start()
     }
 
     private fun setupSearch() {
@@ -224,7 +240,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * Package names of launchable apps, minus excluded apps and myself. No labels/icons.
+     */
+    private fun loadLaunchablePackageNames(): Set<String> {
+        val intent = Intent(Intent.ACTION_MAIN, null).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+        }
+        val excluded = prefs.getExcludedPackages()
+        val out = LinkedHashSet<String>()
+        for (ri in packageManager.queryIntentActivities(intent, 0)) {
+            val pkg = ri.activityInfo.packageName
+            if (pkg != packageName && !excluded.contains(pkg)) out.add(pkg)
+        }
+        return out
+    }
+
+    /**
      * Load launchable apps and filter out excluded apps and myself.
+     * Loads labels and icons, so call it off the main thread.
      */
     private fun loadLaunchableApps(): List<AppItem> {
         val pm = packageManager
@@ -254,15 +287,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setAllAppsToMode(mode: Mode) {
-        val apps = loadLaunchableApps()
-        apps.forEach { app ->
-            prefs.setAppMode(app.packageName, mode)
-        }
+        // Only package names are needed here (no icons), and one prefs write for all apps.
+        val packages = loadLaunchablePackageNames()
+        prefs.setAppModes(packages, mode)
         Toast.makeText(
             this,
-            "Set ${apps.size} apps to ${modeLabel(mode)}",
+            "Set ${packages.size} apps to ${modeLabel(mode)}",
             Toast.LENGTH_SHORT
         ).show()
+        refreshAppList(editSearch.text?.toString().orEmpty())
     }
 
     private fun modeLabel(mode: Mode): String {
@@ -649,6 +682,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun testRootAccessDetailed(): RootAccessResult {
+        // The user is (re)checking root, possibly after granting it: let mode switches retry now.
+        RootShell.resetBackoff()
+
         val manager = detectRootManager()
 
         // This will trigger Magisk/KSU prompt when needed.
