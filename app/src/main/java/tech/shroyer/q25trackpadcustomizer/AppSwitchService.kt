@@ -346,7 +346,7 @@ class AppSwitchService : AccessibilityService() {
 
         homeFlickBurstIsShortcut = !pkg.isNullOrEmpty() &&
                 pkg == defaultHomePackage() &&
-                !activeWindowHasVerticalScroller()
+                isOnHomeScreenPages()
         if (!homeFlickBurstIsShortcut) return false
 
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
@@ -375,23 +375,37 @@ class AppSwitchService : AccessibilityService() {
         return homePackageCache
     }
 
-    private fun activeWindowHasVerticalScroller(): Boolean {
+    /**
+     * True only when the launcher is showing its home pages: a visible workspace, no
+     * recents/overview, and nothing vertically scrollable (so an open app drawer or a
+     * scrolling widget gets normal wheel scrolling). Launcher3-based launchers (Lineage,
+     * Pixel, Nova, Lawnchair...) use the view ids "<pkg>:id/workspace" for the home pages
+     * and "<pkg>:id/overview_panel" for recents. Launchers without a workspace id never get
+     * the shortcuts, so a flick can't land on something unexpected (e.g. a swipe-up in
+     * recents would dismiss an app).
+     */
+    private fun isOnHomeScreenPages(): Boolean {
         val root = try {
             rootInActiveWindow
         } catch (_: Exception) {
             null
         } ?: return false
 
+        var sawWorkspace = false
         val queue: ArrayDeque<AccessibilityNodeInfo> = ArrayDeque()
         queue.add(root)
         var visited = 0
         while (queue.isNotEmpty()) {
             val node = queue.removeFirst()
             visited++
-            if (node.isVisibleToUser && isVerticalScroller(node)) {
-                node.recycle()
-                recycleQueue(queue)
-                return true
+            if (node.isVisibleToUser) {
+                val viewId = node.viewIdResourceName.orEmpty()
+                if (viewId.endsWith(":id/overview_panel", ignoreCase = true) || isVerticalScroller(node)) {
+                    node.recycle()
+                    recycleQueue(queue)
+                    return false
+                }
+                if (viewId.endsWith(":id/workspace", ignoreCase = true)) sawWorkspace = true
             }
             if (visited < MAX_TREE_NODES) {
                 for (i in 0 until node.childCount) {
@@ -400,7 +414,7 @@ class AppSwitchService : AccessibilityService() {
             }
             node.recycle()
         }
-        return false
+        return sawWorkspace
     }
 
     private fun isVerticalScroller(node: AccessibilityNodeInfo): Boolean {
