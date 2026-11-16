@@ -285,26 +285,27 @@ class AppSwitchService : AccessibilityService() {
         val pkg = AppState.currentForegroundPackage
         val settings = prefs.getEffectiveScrollSettings(pkg)
         val steps = settings.sensitivity.steps
+        val notches = settings.sensitivity.wheelNotches
 
         when (event.keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> {
                 val scrollUp = !settings.invertVertical
-                scrollVertical(scrollUp, steps)
+                scrollVertical(scrollUp, steps, notches)
             }
             KeyEvent.KEYCODE_DPAD_DOWN -> {
                 val scrollUp = settings.invertVertical
-                scrollVertical(scrollUp, steps)
+                scrollVertical(scrollUp, steps, notches)
             }
             KeyEvent.KEYCODE_DPAD_LEFT -> {
                 if (settings.horizontalEnabled) {
                     val scrollLeft = !settings.invertHorizontal
-                    scrollHorizontal(scrollLeft, steps)
+                    scrollHorizontal(scrollLeft, steps, notches)
                 }
             }
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
                 if (settings.horizontalEnabled) {
                     val scrollLeft = settings.invertHorizontal
-                    scrollHorizontal(scrollLeft, steps)
+                    scrollHorizontal(scrollLeft, steps, notches)
                 }
             }
         }
@@ -990,10 +991,10 @@ class AppSwitchService : AccessibilityService() {
 
     // ---------- SCROLL HELPERS ----------
 
-    private fun scrollVertical(up: Boolean, steps: Int) {
+    private fun scrollVertical(up: Boolean, steps: Int, notches: Float) {
         // "up" moves the content like a finger dragged up, i.e. reveals what's below:
         // that's a wheel scroll down (negative VSCROLL).
-        if (wheelScroll(v = if (up) -steps * WHEEL_NOTCHES_PER_STEP else steps * WHEEL_NOTCHES_PER_STEP, h = 0f)) return
+        if (wheelScroll(v = if (up) -notches else notches, h = 0f)) return
         scrollEngine?.let {
             it.scrollVertical(up, steps)
             return
@@ -1006,9 +1007,9 @@ class AppSwitchService : AccessibilityService() {
         }
     }
 
-    private fun scrollHorizontal(left: Boolean, steps: Int) {
+    private fun scrollHorizontal(left: Boolean, steps: Int, notches: Float) {
         // "left" reveals content to the right: positive HSCROLL.
-        if (wheelScroll(v = 0f, h = if (left) steps * WHEEL_NOTCHES_PER_STEP else -steps * WHEEL_NOTCHES_PER_STEP)) return
+        if (wheelScroll(v = 0f, h = if (left) notches else -notches)) return
         scrollEngine?.let {
             it.scrollHorizontal(left, steps)
             return
@@ -1304,7 +1305,6 @@ class AppSwitchService : AccessibilityService() {
         private const val TEXT_RECENT_MS = 1200L
         private const val CONTENT_CHECK_DELAY_MS = 120L
         private const val SCROLL_QUIET_MS = 300L
-        private const val WHEEL_NOTCHES_PER_STEP = 1.0f
         private const val FOREGROUND_VERIFY_DELAY_MS = 250L
         private const val MAX_TREE_NODES = 300
         private const val APP_LABEL_CACHE_MAX = 64
