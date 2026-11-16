@@ -406,6 +406,12 @@ class AppSwitchService : AccessibilityService() {
     private fun isVerticalScroller(node: AccessibilityNodeInfo): Boolean {
         if (!node.isScrollable) return false
 
+        // Launcher3-based home screens (Lineage, Pixel, Nova, Lawnchair...) report the
+        // horizontally paged workspace as a plain android.widget.ScrollView with id
+        // "<pkg>:id/workspace", so neither class name nor actions give it away.
+        val viewId = node.viewIdResourceName.orEmpty()
+        if (viewId.endsWith(":id/workspace", ignoreCase = true)) return false
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val ids = node.actionList.map { it.id }
             if (ids.contains(android.R.id.accessibilityActionScrollUp) ||
