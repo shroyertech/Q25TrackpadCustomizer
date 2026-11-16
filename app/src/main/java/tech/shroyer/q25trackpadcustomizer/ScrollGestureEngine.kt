@@ -19,8 +19,9 @@ import androidx.annotation.RequiresApi
  * queue, and the next segment is dispatched as a continuation of the same stroke
  * (StrokeDescription.continueStroke) when the previous one finishes, so movement is
  * one smooth drag. After a short idle period the finger is lifted with almost no
- * velocity, so scrolling stops where the user stopped (no extra fling). If the finger
- * would leave the usable screen area, the stroke is lifted and a new one starts.
+ * velocity, so scrolling stops where the user stopped (no extra fling). Each drag starts
+ * at the screen centre and stays in the middle band; when it runs out of room it is
+ * lifted and a new one starts from the centre.
  */
 @RequiresApi(Build.VERSION_CODES.O)
 class ScrollGestureEngine(private val service: AccessibilityService) {
@@ -92,11 +93,11 @@ class ScrollGestureEngine(private val service: AccessibilityService) {
 
         var current = stroke
         if (current == null) {
-            // New finger: start on the side opposite to travel, to leave room.
+            // New finger always goes down at the screen centre. Starting near an edge can
+            // trigger edge gestures instead of scrolling (e.g. a downward drag from the top
+            // closes the app drawer or pulls the notification shade).
             fingerX = w / 2f
             fingerY = h / 2f
-            val start = if (direction < 0) max else min
-            if (a == Axis.VERTICAL) fingerY = start else fingerX = start
         }
 
         val pos = if (a == Axis.VERTICAL) fingerY else fingerX
@@ -209,10 +210,12 @@ class ScrollGestureEngine(private val service: AccessibilityService) {
         // Distance per scroll "step" as a fraction of the screen along the axis.
         // (The old per-press swipe was 15% but lost much of it to cancellation.)
         private const val STEP_FRACTION = 0.10f
-        private const val EDGE_MARGIN = 0.15f
+        // The finger stays within the middle band of the screen (25%..75%); when it runs out
+        // of room it lifts without a fling and a new drag starts from the centre.
+        private const val EDGE_MARGIN = 0.25f
         private const val MAX_SEGMENT_FRACTION = 0.5f
         // Time for the finger to cross the whole usable area; sets drag speed.
-        private const val FULL_TRAVEL_MS = 450f
+        private const val FULL_TRAVEL_MS = 250f
         private const val MIN_SEGMENT_MS = 16L
         private const val MAX_SEGMENT_MS = 250L
         private const val IDLE_LIFT_MS = 140L
