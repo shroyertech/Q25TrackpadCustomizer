@@ -45,6 +45,12 @@ class AppSwitchService : AccessibilityService() {
 
     private var lastTextInteractionUptime: Long = 0L
     private var lastWindowStateChangeUptime: Long = 0L
+    private var lastScrollKeyUptime: Long = 0L
+
+    // Continuous-drag scrolling (API 26+); older versions use one swipe per key.
+    private val scrollEngine: ScrollGestureEngine? by lazy {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ScrollGestureEngine(this) else null
+    }
 
     private val appLabelCache = HashMap<String, String?>()
 
@@ -129,6 +135,7 @@ class AppSwitchService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) scrollEngine?.cancel()
         stopTextOverrideMonitor()
         mainHandler.removeCallbacks(contentCheckRunnable)
         mainHandler.removeCallbacks(foregroundVerifyRunnable)
@@ -269,6 +276,7 @@ class AppSwitchService : AccessibilityService() {
     }
 
     private fun handleScrollKey(event: KeyEvent) {
+        lastScrollKeyUptime = SystemClock.uptimeMillis()
         val pkg = AppState.currentForegroundPackage
         val settings = prefs.getEffectiveScrollSettings(pkg)
         val steps = settings.sensitivity.steps
@@ -310,6 +318,9 @@ class AppSwitchService : AccessibilityService() {
         onFailure: (() -> Unit)? = null
     ) {
         AppState.currentMode = target
+        if (target != Mode.SCROLL_WHEEL && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            scrollEngine?.cancel()
+        }
         TrackpadController.requestMode(target) { ok ->
             if (ok) {
                 NotificationHelper.clearRootError(this)
@@ -414,6 +425,12 @@ class AppSwitchService : AccessibilityService() {
     // Throttle: at most one check per CONTENT_CHECK_DELAY_MS, however many events arrive.
     private fun scheduleContentCheck() {
         if (contentCheckScheduled) return
+        // While scroll-wheel scrolling is underway the list fires content-changed events
+        // nonstop; walking the view tree for each would compete with key handling on the
+        // main thread and make scrolling stutter. Text-field detection resumes right after.
+        if (AppState.currentMode == Mode.SCROLL_WHEEL &&
+            SystemClock.uptimeMillis() - lastScrollKeyUptime < SCROLL_QUIET_MS
+        ) return
         contentCheckScheduled = true
         mainHandler.postDelayed(contentCheckRunnable, CONTENT_CHECK_DELAY_MS)
     }
@@ -966,6 +983,10 @@ class AppSwitchService : AccessibilityService() {
     // ---------- SCROLL HELPERS ----------
 
     private fun scrollVertical(up: Boolean, steps: Int) {
+        scrollEngine?.let {
+            it.scrollVertical(up, steps)
+            return
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             val ok = performVerticalGesture(up, steps)
             if (!ok) scrollVerticalNodeBased(up, steps)
@@ -975,6 +996,10 @@ class AppSwitchService : AccessibilityService() {
     }
 
     private fun scrollHorizontal(left: Boolean, steps: Int) {
+        scrollEngine?.let {
+            it.scrollHorizontal(left, steps)
+            return
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             val ok = performHorizontalGesture(left, steps)
             if (!ok) scrollHorizontalNodeBased(left, steps)
@@ -1260,6 +1285,7 @@ class AppSwitchService : AccessibilityService() {
         private const val TEXT_OVERRIDE_CHECK_INTERVAL_MS = 350L
         private const val TEXT_RECENT_MS = 1200L
         private const val CONTENT_CHECK_DELAY_MS = 120L
+        private const val SCROLL_QUIET_MS = 300L
         private const val FOREGROUND_VERIFY_DELAY_MS = 250L
         private const val MAX_TREE_NODES = 300
         private const val APP_LABEL_CACHE_MAX = 64
