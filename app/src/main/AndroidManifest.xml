@@ -7,6 +7,12 @@
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
 
+        <!-- Default home app, for scroll-wheel home screen shortcuts. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
+
         <!-- Root managers, so they can be detected for setup help (Android 11+ package visibility). -->
         <package android:name="com.topjohnwu.magisk" />
         <package android:name="io.github.vvb2060.magisk" />

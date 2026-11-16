@@ -530,12 +530,26 @@ class Prefs(context: Context) {
         val horizontal = prefs.getBoolean(KEY_SCROLL_GLOBAL_HORIZONTAL, false)
         val invertV = prefs.getBoolean(KEY_SCROLL_GLOBAL_INV_V, false)
         val invertH = prefs.getBoolean(KEY_SCROLL_GLOBAL_INV_H, false)
+        val method = ScrollMethod.fromPrefValue(prefs.getInt(KEY_SCROLL_GLOBAL_METHOD, ScrollMethod.WHEEL.prefValue))
         return ScrollSettings(
             sensitivity = sens,
             horizontalEnabled = horizontal,
             invertVertical = invertV,
-            invertHorizontal = invertH
+            invertHorizontal = invertH,
+            method = method
         )
+    }
+
+    fun setGlobalScrollMethod(method: ScrollMethod) {
+        prefs.edit().putInt(KEY_SCROLL_GLOBAL_METHOD, method.prefValue).apply()
+    }
+
+    // On the launcher's home screen (nothing scrollable), wheel-method flicks act as
+    // shortcuts: up = open app drawer, down = notification shade.
+    fun isScrollHomeShortcutsEnabled(): Boolean = prefs.getBoolean(KEY_SCROLL_HOME_SHORTCUTS, true)
+
+    fun setScrollHomeShortcutsEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_SCROLL_HOME_SHORTCUTS, enabled).apply()
     }
 
     // Real-wheel-only options (global).
@@ -570,14 +584,15 @@ class Prefs(context: Context) {
 
     // ---- Per-app scroll settings ----
 
-    // Checks the four known keys directly. (Previously this copied the entire prefs map
+    // Checks the known keys directly. (Previously this copied the entire prefs map
     // via prefs.all on every scroll key press, and the suffix match could also hit
     // packages whose name merely ended with "_<packageName>".)
     private fun hasAnyAppScrollSettings(packageName: String): Boolean {
         return prefs.contains(keyScrollAppSens(packageName)) ||
                 prefs.contains(keyScrollAppHorizontal(packageName)) ||
                 prefs.contains(keyScrollAppInvV(packageName)) ||
-                prefs.contains(keyScrollAppInvH(packageName))
+                prefs.contains(keyScrollAppInvH(packageName)) ||
+                prefs.contains(keyScrollAppMethod(packageName))
     }
 
     fun getAppScrollSettings(packageName: String): ScrollSettings? {
@@ -606,11 +621,17 @@ class Prefs(context: Context) {
             prefs.getBoolean(invHKey, global.invertHorizontal)
         } else global.invertHorizontal
 
+        val methodKey = keyScrollAppMethod(packageName)
+        val method = if (prefs.contains(methodKey)) {
+            ScrollMethod.fromPrefValue(prefs.getInt(methodKey, global.method.prefValue))
+        } else global.method
+
         return ScrollSettings(
             sensitivity = sens,
             horizontalEnabled = horizontal,
             invertVertical = invertV,
-            invertHorizontal = invertH
+            invertHorizontal = invertH,
+            method = method
         )
     }
 
@@ -634,6 +655,10 @@ class Prefs(context: Context) {
 
     fun setAppScrollInvertHorizontal(packageName: String, invert: Boolean) {
         prefs.edit().putBoolean(keyScrollAppInvH(packageName), invert).apply()
+    }
+
+    fun setAppScrollMethod(packageName: String, method: ScrollMethod) {
+        prefs.edit().putInt(keyScrollAppMethod(packageName), method.prefValue).apply()
     }
 
     // ---- Internal helpers ----
@@ -737,11 +762,14 @@ class Prefs(context: Context) {
         private const val KEY_SCROLL_GLOBAL_INV_H = "scroll_global_inv_h"
         private const val KEY_SCROLL_GLOBAL_ACCEL = "scroll_global_accel"
         private const val KEY_SCROLL_GLOBAL_SMOOTHNESS = "scroll_global_smoothness"
+        private const val KEY_SCROLL_GLOBAL_METHOD = "scroll_global_method"
+        private const val KEY_SCROLL_HOME_SHORTCUTS = "scroll_home_shortcuts"
 
         private fun keyScrollAppSens(pkg: String) = "scroll_app_sens_$pkg"
         private fun keyScrollAppHorizontal(pkg: String) = "scroll_app_horizontal_$pkg"
         private fun keyScrollAppInvV(pkg: String) = "scroll_app_inv_v_$pkg"
         private fun keyScrollAppInvH(pkg: String) = "scroll_app_inv_h_$pkg"
+        private fun keyScrollAppMethod(pkg: String) = "scroll_app_method_$pkg"
 
         const val DEFAULT_HOLD_KEYCODE = 59 // KEYCODE_SHIFT_LEFT
         const val DEFAULT_HOLD2_KEYCODE = 60 // KEYCODE_SHIFT_RIGHT

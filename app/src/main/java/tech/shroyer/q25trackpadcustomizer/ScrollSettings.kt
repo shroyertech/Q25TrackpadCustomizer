@@ -29,10 +29,26 @@ enum class ScrollSmoothness(val prefValue: Int, val ease: Float) {
     }
 }
 
+// How scroll-wheel mode moves content.
+// WHEEL: real mouse-wheel events through the root helper (falls back to DRAG without root).
+// DRAG: simulated finger drags. Apps see touch swipes, so swipe gestures (e.g. a launcher's
+//       swipe-up app drawer) work, but lists can hit edge gestures.
+enum class ScrollMethod(val prefValue: Int) {
+    WHEEL(0),
+    DRAG(1);
+
+    companion object {
+        fun fromPrefValue(value: Int): ScrollMethod {
+            return values().firstOrNull { it.prefValue == value } ?: WHEEL
+        }
+    }
+}
+
 // Bundle scroll-related options together
 data class ScrollSettings(
     val sensitivity: ScrollSensitivity,
     val horizontalEnabled: Boolean,
     val invertVertical: Boolean,
-    val invertHorizontal: Boolean
+    val invertHorizontal: Boolean,
+    val method: ScrollMethod = ScrollMethod.WHEEL
 )

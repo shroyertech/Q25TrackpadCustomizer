@@ -72,6 +72,8 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var checkScrollInvertVertical: CheckBox
     private lateinit var checkScrollInvertHorizontal: CheckBox
     private lateinit var spinnerScrollSmoothness: Spinner
+    private lateinit var spinnerScrollMethod: Spinner
+    private lateinit var checkScrollHomeShortcuts: CheckBox
     private lateinit var checkScrollAcceleration: CheckBox
 
     // Backup/restore
@@ -125,6 +127,16 @@ class SettingsActivity : AppCompatActivity() {
         "Snappy",
         "Normal",
         "Smooth"
+    )
+
+    private val scrollMethodOptions = listOf(
+        ScrollMethod.WHEEL,
+        ScrollMethod.DRAG
+    )
+
+    private val scrollMethodLabels = listOf(
+        "Wheel (smooth, needs root)",
+        "Drag (touch swipes)"
     )
 
     private val scrollSensLabels = listOf(
@@ -240,6 +252,8 @@ class SettingsActivity : AppCompatActivity() {
         checkScrollInvertVertical = findViewById(R.id.checkScrollInvertVertical)
         checkScrollInvertHorizontal = findViewById(R.id.checkScrollInvertHorizontal)
         spinnerScrollSmoothness = findViewById(R.id.spinnerScrollSmoothness)
+        spinnerScrollMethod = findViewById(R.id.spinnerScrollMethod)
+        checkScrollHomeShortcuts = findViewById(R.id.checkScrollHomeShortcuts)
         checkScrollAcceleration = findViewById(R.id.checkScrollAcceleration)
 
         // Backup/restore
@@ -354,6 +368,11 @@ class SettingsActivity : AppCompatActivity() {
                 spinnerScrollSmoothness.setSelection(smoothIdx, false)
             }
             checkScrollAcceleration.isChecked = prefs.isScrollAccelerationEnabled()
+            val methodIdx = scrollMethodOptions.indexOf(scroll.method).coerceAtLeast(0)
+            if (spinnerScrollMethod.selectedItemPosition != methodIdx) {
+                spinnerScrollMethod.setSelection(methodIdx, false)
+            }
+            checkScrollHomeShortcuts.isChecked = prefs.isScrollHomeShortcutsEnabled()
 
             // Exclusions
             if (::excludedAdapter.isInitialized) {
@@ -1272,6 +1291,21 @@ If you’re using something else, look for a “Superuser / SU” permission lis
         checkScrollAcceleration.setOnCheckedChangeListener { _, isChecked ->
             if (suppressUiListeners) return@setOnCheckedChangeListener
             prefs.setScrollAccelerationEnabled(isChecked)
+        }
+
+        val methodAdapter = ArrayAdapter(this, AndroidR.layout.simple_spinner_item, scrollMethodLabels)
+        methodAdapter.setDropDownViewResource(AndroidR.layout.simple_spinner_dropdown_item)
+        spinnerScrollMethod.adapter = methodAdapter
+        spinnerScrollMethod.setSelection(scrollMethodOptions.indexOf(current.method).coerceAtLeast(0), false)
+        spinnerScrollMethod.setOnItemSelectedListenerSimple { position ->
+            if (suppressUiListeners) return@setOnItemSelectedListenerSimple
+            prefs.setGlobalScrollMethod(scrollMethodOptions[position])
+        }
+
+        checkScrollHomeShortcuts.isChecked = prefs.isScrollHomeShortcutsEnabled()
+        checkScrollHomeShortcuts.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressUiListeners) return@setOnCheckedChangeListener
+            prefs.setScrollHomeShortcutsEnabled(isChecked)
         }
     }
 

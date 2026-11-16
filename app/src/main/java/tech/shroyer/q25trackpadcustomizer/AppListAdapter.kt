@@ -111,6 +111,8 @@ class AppListAdapter(
         // Scroll controls
         val tvScrollSensitivityLabel = dialogView.findViewById<TextView>(R.id.tvScrollSensitivityLabel)
         val spinnerSens = dialogView.findViewById<Spinner>(R.id.spinnerAppScrollSensitivity)
+        val tvScrollMethodLabel = dialogView.findViewById<TextView>(R.id.tvAppScrollMethodLabel)
+        val spinnerMethod = dialogView.findViewById<Spinner>(R.id.spinnerAppScrollMethod)
         val checkHorizontal = dialogView.findViewById<CheckBox>(R.id.checkAppScrollHorizontal)
         val checkInvertV = dialogView.findViewById<CheckBox>(R.id.checkAppScrollInvertVertical)
         val checkInvertH = dialogView.findViewById<CheckBox>(R.id.checkAppScrollInvertHorizontal)
@@ -249,8 +251,19 @@ class AppListAdapter(
         }
         spinnerSens.adapter = sensAdapter
 
+        val methodLabels = listOf("Wheel (smooth, needs root)", "Drag (touch swipes)")
+        val methodOptions = listOf(ScrollMethod.WHEEL, ScrollMethod.DRAG)
+        spinnerMethod.adapter = ArrayAdapter(
+            context,
+            android.R.layout.simple_spinner_item,
+            methodLabels
+        ).apply {
+            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+
         val effectiveScroll = prefs.getEffectiveScrollSettings(app.packageName)
         spinnerSens.setSelection(sensOptions.indexOf(effectiveScroll.sensitivity).coerceAtLeast(0), false)
+        spinnerMethod.setSelection(methodOptions.indexOf(effectiveScroll.method).coerceAtLeast(0), false)
         checkHorizontal.isChecked = effectiveScroll.horizontalEnabled
         checkInvertV.isChecked = effectiveScroll.invertVertical
         checkInvertH.isChecked = effectiveScroll.invertHorizontal
@@ -258,6 +271,8 @@ class AppListAdapter(
         val scrollVis = if (isScrollEffective) View.VISIBLE else View.GONE
         tvScrollSensitivityLabel.visibility = scrollVis
         spinnerSens.visibility = scrollVis
+        tvScrollMethodLabel.visibility = scrollVis
+        spinnerMethod.visibility = scrollVis
         checkHorizontal.visibility = scrollVis
         checkInvertV.visibility = scrollVis
         checkInvertH.visibility = scrollVis
@@ -503,6 +518,7 @@ class AppListAdapter(
                 if (isScrollEffective) {
                     val selSens = sensOptions[spinnerSens.selectedItemPosition]
                     prefs.setAppScrollSensitivity(app.packageName, selSens)
+                    prefs.setAppScrollMethod(app.packageName, methodOptions[spinnerMethod.selectedItemPosition])
                     prefs.setAppScrollHorizontalEnabled(app.packageName, checkHorizontal.isChecked)
                     prefs.setAppScrollInvertVertical(app.packageName, checkInvertV.isChecked)
                     prefs.setAppScrollInvertHorizontal(app.packageName, checkInvertH.isChecked)

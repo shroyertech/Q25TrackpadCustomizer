@@ -2,6 +2,8 @@ package tech.shroyer.q25trackpadcustomizer
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.database.ContentObserver
 import android.graphics.Path
 import android.os.Build
@@ -286,28 +288,154 @@ class AppSwitchService : AccessibilityService() {
         val settings = prefs.getEffectiveScrollSettings(pkg)
         val steps = settings.sensitivity.steps
         val notches = settings.sensitivity.wheelNotches
+        val useWheel = settings.method == ScrollMethod.WHEEL
+
+        val isVertical = event.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
+                event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+        if (isVertical && useWheel && handleHomeScreenFlick(event.keyCode, pkg)) return
 
         when (event.keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> {
                 val scrollUp = !settings.invertVertical
-                scrollVertical(scrollUp, steps, notches)
+                scrollVertical(scrollUp, steps, notches, useWheel)
             }
             KeyEvent.KEYCODE_DPAD_DOWN -> {
                 val scrollUp = settings.invertVertical
-                scrollVertical(scrollUp, steps, notches)
+                scrollVertical(scrollUp, steps, notches, useWheel)
             }
             KeyEvent.KEYCODE_DPAD_LEFT -> {
                 if (settings.horizontalEnabled) {
                     val scrollLeft = !settings.invertHorizontal
-                    scrollHorizontal(scrollLeft, steps, notches)
+                    scrollHorizontal(scrollLeft, steps, notches, useWheel)
                 }
             }
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
                 if (settings.horizontalEnabled) {
                     val scrollLeft = settings.invertHorizontal
-                    scrollHorizontal(scrollLeft, steps, notches)
+                    scrollHorizontal(scrollLeft, steps, notches, useWheel)
                 }
             }
+        }
+    }
+
+    // ---------- HOME SCREEN FLICK SHORTCUTS ----------
+    //
+    // Launchers page sideways on vertical mouse-wheel events, so with the wheel method the
+    // home screen can't be swiped into the app drawer. When the default home app is in front
+    // and nothing vertically scrollable is on screen (i.e. the home pages, not an open
+    // drawer), a vertical trackpad flick instead acts as a shortcut: up opens the app drawer
+    // (swipe-up gesture), down opens the notification shade. One action per flick: the
+    // remaining ticks of the same burst are swallowed. Uses the physical trackpad direction,
+    // regardless of the invert settings.
+
+    private var homeFlickLastUptime = 0L
+    private var homeFlickLastKey = 0
+    private var homeFlickBurstIsShortcut = false
+
+    private var homePackageCache: String? = null
+    private var homePackageCheckedUptime = 0L
+
+    private fun handleHomeScreenFlick(keyCode: Int, pkg: String?): Boolean {
+        if (!prefs.isScrollHomeShortcutsEnabled()) return false
+
+        val now = SystemClock.uptimeMillis()
+        val sameBurst = keyCode == homeFlickLastKey && now - homeFlickLastUptime < HOME_FLICK_BURST_GAP_MS
+        homeFlickLastUptime = now
+        homeFlickLastKey = keyCode
+        if (sameBurst) return homeFlickBurstIsShortcut
+
+        homeFlickBurstIsShortcut = !pkg.isNullOrEmpty() &&
+                pkg == defaultHomePackage() &&
+                !activeWindowHasVerticalScroller()
+        if (!homeFlickBurstIsShortcut) return false
+
+        if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+            openAppDrawerBySwipe()
+        } else {
+            performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
+        }
+        return true
+    }
+
+    /** Package of the default home app, cached for a few seconds. Null if none is set. */
+    private fun defaultHomePackage(): String? {
+        val now = SystemClock.uptimeMillis()
+        if (homePackageCheckedUptime != 0L && now - homePackageCheckedUptime < HOME_PACKAGE_CACHE_MS) {
+            return homePackageCache
+        }
+        homePackageCheckedUptime = now
+        homePackageCache = try {
+            val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+            packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+                ?.activityInfo?.packageName
+                ?.takeIf { it != "android" } // the chooser: no default home app picked
+        } catch (_: Exception) {
+            null
+        }
+        return homePackageCache
+    }
+
+    private fun activeWindowHasVerticalScroller(): Boolean {
+        val root = try {
+            rootInActiveWindow
+        } catch (_: Exception) {
+            null
+        } ?: return false
+
+        val queue: ArrayDeque<AccessibilityNodeInfo> = ArrayDeque()
+        queue.add(root)
+        var visited = 0
+        while (queue.isNotEmpty()) {
+            val node = queue.removeFirst()
+            visited++
+            if (node.isVisibleToUser && isVerticalScroller(node)) {
+                node.recycle()
+                recycleQueue(queue)
+                return true
+            }
+            if (visited < MAX_TREE_NODES) {
+                for (i in 0 until node.childCount) {
+                    node.getChild(i)?.let { queue.add(it) }
+                }
+            }
+            node.recycle()
+        }
+        return false
+    }
+
+    private fun isVerticalScroller(node: AccessibilityNodeInfo): Boolean {
+        if (!node.isScrollable) return false
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val ids = node.actionList.map { it.id }
+            if (ids.contains(android.R.id.accessibilityActionScrollUp) ||
+                ids.contains(android.R.id.accessibilityActionScrollDown)
+            ) return true
+            if (ids.contains(android.R.id.accessibilityActionScrollLeft) ||
+                ids.contains(android.R.id.accessibilityActionScrollRight)
+            ) return false
+        }
+
+        // No direction info: rule out horizontal pagers (launcher workspaces, view pagers).
+        val cls = node.className?.toString().orEmpty()
+        if (cls.contains("Horizontal") || cls.contains("ViewPager") ||
+            cls.contains("PagedView") || cls.contains("Workspace")
+        ) return false
+
+        val info = node.collectionInfo
+        if (info != null && info.rowCount in 0..1 && info.columnCount > 1) return false
+
+        return true
+    }
+
+    private fun openAppDrawerBySwipe() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
+        val dm = resources.displayMetrics
+        val x = dm.widthPixels / 2f
+        val h = dm.heightPixels.toFloat()
+        try {
+            dispatchGesture(buildGestureStroke(x, h * 0.70f, x, h * 0.30f, HOME_FLICK_SWIPE_MS), null, null)
+        } catch (_: Exception) {
         }
     }
 
@@ -991,10 +1119,10 @@ class AppSwitchService : AccessibilityService() {
 
     // ---------- SCROLL HELPERS ----------
 
-    private fun scrollVertical(up: Boolean, steps: Int, notches: Float) {
+    private fun scrollVertical(up: Boolean, steps: Int, notches: Float, useWheel: Boolean) {
         // "up" moves the content like a finger dragged up, i.e. reveals what's below:
         // that's a wheel scroll down (negative VSCROLL).
-        if (wheelScroll(v = if (up) -notches else notches, h = 0f)) return
+        if (useWheel && wheelScroll(v = if (up) -notches else notches, h = 0f)) return
         scrollEngine?.let {
             it.scrollVertical(up, steps)
             return
@@ -1007,9 +1135,9 @@ class AppSwitchService : AccessibilityService() {
         }
     }
 
-    private fun scrollHorizontal(left: Boolean, steps: Int, notches: Float) {
+    private fun scrollHorizontal(left: Boolean, steps: Int, notches: Float, useWheel: Boolean) {
         // "left" reveals content to the right: positive HSCROLL.
-        if (wheelScroll(v = 0f, h = if (left) notches else -notches)) return
+        if (useWheel && wheelScroll(v = 0f, h = if (left) notches else -notches)) return
         scrollEngine?.let {
             it.scrollHorizontal(left, steps)
             return
@@ -1389,6 +1517,9 @@ class AppSwitchService : AccessibilityService() {
         private const val CONTENT_CHECK_DELAY_MS = 120L
         private const val SCROLL_QUIET_MS = 300L
         private const val WHEEL_BURST_GAP_MS = 300L
+        private const val HOME_FLICK_BURST_GAP_MS = 400L
+        private const val HOME_PACKAGE_CACHE_MS = 5000L
+        private const val HOME_FLICK_SWIPE_MS = 120L
         private const val WHEEL_ACCEL_WINDOW_MS = 120L
         private const val WHEEL_ACCEL_GROWTH = 1.3f
         private const val WHEEL_ACCEL_MAX = 3.0f

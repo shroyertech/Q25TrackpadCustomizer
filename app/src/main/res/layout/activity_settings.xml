@@ -456,6 +456,27 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="4dp" />
 
+        <TextView
+            android:id="@+id/tvScrollMethodLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Scroll method (default for all apps)"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/spinnerScrollMethod"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp" />
+
+        <CheckBox
+            android:id="@+id/checkScrollHomeShortcuts"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:text="Home screen shortcuts (wheel method): flick up opens the app drawer, flick down opens notifications"
+            android:textSize="12sp" />
+
         <LinearLayout
             android:id="@+id/layoutScrollOptionsRow"
             android:orientation="horizontal"
