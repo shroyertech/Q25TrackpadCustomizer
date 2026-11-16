@@ -1022,9 +1022,92 @@ class AppSwitchService : AccessibilityService() {
         }
     }
 
+    // ---- Wheel scrolling: acceleration + target point ----
+
+    private var lastWheelTickUptime = 0L
+    private var lastWheelDirection = 0  // sign of (v + h)
+    private var wheelAccel = 1f
+    private var wheelTargetX = 0f
+    private var wheelTargetY = 0f
+
     private fun wheelScroll(v: Float, h: Float): Boolean {
+        val now = SystemClock.uptimeMillis()
+        val dt = now - lastWheelTickUptime
+        val dir = if (v + h > 0) 1 else -1
+        val newBurst = dt > WHEEL_BURST_GAP_MS || dir != lastWheelDirection
+
+        // Acceleration: ticks that follow each other quickly in the same direction scroll
+        // progressively further; any pause or direction change resets to 1x.
+        wheelAccel = when {
+            !prefs.isScrollAccelerationEnabled() -> 1f
+            !newBurst && dt < WHEEL_ACCEL_WINDOW_MS -> (wheelAccel * WHEEL_ACCEL_GROWTH).coerceAtMost(WHEEL_ACCEL_MAX)
+            else -> 1f
+        }
+
+        // Aim at the scrollable view in the focused window, picked once per burst.
+        if (newBurst || (wheelTargetX == 0f && wheelTargetY == 0f)) {
+            updateWheelTarget()
+        }
+
+        lastWheelTickUptime = now
+        lastWheelDirection = dir
+
+        return wheelInjector.scroll(
+            wheelTargetX, wheelTargetY,
+            v * wheelAccel, h * wheelAccel,
+            prefs.getScrollSmoothness().ease
+        )
+    }
+
+    /**
+     * Wheel events go to whatever window is under the given point, so pick a point inside
+     * the focused window: the centre of its first scrollable view if there is one, else the
+     * centre of the window, else the centre of the screen.
+     */
+    private fun updateWheelTarget() {
         val dm = resources.displayMetrics
-        return wheelInjector.scroll(dm.widthPixels / 2f, dm.heightPixels / 2f, v, h)
+        wheelTargetX = dm.widthPixels / 2f
+        wheelTargetY = dm.heightPixels / 2f
+
+        val root = try {
+            rootInActiveWindow
+        } catch (_: Exception) {
+            null
+        } ?: return
+
+        val rect = android.graphics.Rect()
+        try {
+            root.getBoundsInScreen(rect)
+            if (!rect.isEmpty) {
+                wheelTargetX = rect.exactCenterX()
+                wheelTargetY = rect.exactCenterY()
+            }
+        } catch (_: Exception) {
+        }
+
+        val queue: ArrayDeque<AccessibilityNodeInfo> = ArrayDeque()
+        queue.add(root)
+        var visited = 0
+        while (queue.isNotEmpty()) {
+            val node = queue.removeFirst()
+            visited++
+            if (node.isScrollable && node.isVisibleToUser) {
+                node.getBoundsInScreen(rect)
+                if (!rect.isEmpty) {
+                    wheelTargetX = rect.exactCenterX()
+                    wheelTargetY = rect.exactCenterY()
+                }
+                node.recycle()
+                recycleQueue(queue)
+                return
+            }
+            if (visited < MAX_TREE_NODES) {
+                for (i in 0 until node.childCount) {
+                    node.getChild(i)?.let { queue.add(it) }
+                }
+            }
+            node.recycle()
+        }
     }
 
     private fun buildGestureStroke(
@@ -1305,6 +1388,10 @@ class AppSwitchService : AccessibilityService() {
         private const val TEXT_RECENT_MS = 1200L
         private const val CONTENT_CHECK_DELAY_MS = 120L
         private const val SCROLL_QUIET_MS = 300L
+        private const val WHEEL_BURST_GAP_MS = 300L
+        private const val WHEEL_ACCEL_WINDOW_MS = 120L
+        private const val WHEEL_ACCEL_GROWTH = 1.3f
+        private const val WHEEL_ACCEL_MAX = 3.0f
         private const val FOREGROUND_VERIFY_DELAY_MS = 250L
         private const val MAX_TREE_NODES = 300
         private const val APP_LABEL_CACHE_MAX = 64

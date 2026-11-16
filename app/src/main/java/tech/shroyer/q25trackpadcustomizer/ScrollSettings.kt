@@ -15,6 +15,20 @@ enum class ScrollSensitivity(val prefValue: Int, val steps: Int, val wheelNotche
     }
 }
 
+// How each wheel tick is spread out over time (real wheel scrolling only).
+// ease = fraction of the remaining queued scroll released per frame (higher = snappier).
+enum class ScrollSmoothness(val prefValue: Int, val ease: Float) {
+    SNAPPY(0, 0.55f),
+    NORMAL(1, 0.30f),
+    SMOOTH(2, 0.15f);
+
+    companion object {
+        fun fromPrefValue(value: Int): ScrollSmoothness {
+            return values().firstOrNull { it.prefValue == value } ?: NORMAL
+        }
+    }
+}
+
 // Bundle scroll-related options together
 data class ScrollSettings(
     val sensitivity: ScrollSensitivity,

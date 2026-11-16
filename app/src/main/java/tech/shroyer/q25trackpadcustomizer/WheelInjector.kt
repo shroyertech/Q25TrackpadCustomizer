@@ -53,12 +53,12 @@ class WheelInjector(context: Context) {
      * Queue [v]/[h] wheel notches at screen point ([x], [y]).
      * Positive v scrolls up (toward the top), positive h scrolls right.
      */
-    fun scroll(x: Float, y: Float, v: Float, h: Float): Boolean {
+    fun scroll(x: Float, y: Float, v: Float, h: Float, ease: Float): Boolean {
         if (!isReady) {
             ensureStarted()
             return false
         }
-        val line = "s $x $y $v $h\n"
+        val line = "s $x $y $v $h $ease\n"
         try {
             io.execute {
                 val w = writer

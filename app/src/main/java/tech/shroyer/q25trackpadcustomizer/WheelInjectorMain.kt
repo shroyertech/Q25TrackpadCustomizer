@@ -16,7 +16,8 @@ import java.lang.reflect.Method
  * inside a root shell, so it may call InputManager.injectInputEvent.
  *
  * Protocol (stdin, one command per line):
- *   s <x> <y> <v> <h>   add v / h wheel notches at screen point (x, y)
+ *   s <x> <y> <v> <h> [ease]   add v / h wheel notches at screen point (x, y);
+ *                              ease (0..1) = share of the queue released per frame
  *   q                   quit
  * Prints "ready" once injection is available, or "error <reason>" and exits.
  *
@@ -28,8 +29,8 @@ import java.lang.reflect.Method
 object WheelInjectorMain {
 
     private const val FRAME_MS = 16L
-    // Fraction of the remaining queued scroll released each frame (higher = snappier).
-    private const val EASE = 0.30f
+    // Default fraction of the remaining queued scroll released each frame (higher = snappier).
+    private const val DEFAULT_EASE = 0.30f
     private const val MIN_CHUNK = 0.04f
 
     private val lock = Object()
@@ -37,6 +38,7 @@ object WheelInjectorMain {
     private var pendingH = 0f
     private var x = 0f
     private var y = 0f
+    private var ease = DEFAULT_EASE
 
     @JvmStatic
     fun main(args: Array<String>) {
@@ -71,9 +73,11 @@ object WheelInjectorMain {
                     val py = parts[2].toFloatOrNull() ?: continue
                     val v = parts[3].toFloatOrNull() ?: 0f
                     val h = parts[4].toFloatOrNull() ?: 0f
+                    val e = parts.getOrNull(5)?.toFloatOrNull()?.coerceIn(0.05f, 1f)
                     synchronized(lock) {
                         x = px
                         y = py
+                        if (e != null) ease = e
                         // A direction change drops whatever was still queued the other way.
                         if (v != 0f && pendingV != 0f && (v > 0) != (pendingV > 0)) pendingV = 0f
                         if (h != 0f && pendingH != 0f && (h > 0) != (pendingH > 0)) pendingH = 0f
@@ -95,8 +99,8 @@ object WheelInjectorMain {
             var py: Float
             synchronized(lock) {
                 while (pendingV == 0f && pendingH == 0f) lock.wait()
-                v = chunk(pendingV)
-                h = chunk(pendingH)
+                v = chunk(pendingV, ease)
+                h = chunk(pendingH, ease)
                 pendingV -= v
                 pendingH -= h
                 px = x
@@ -110,10 +114,10 @@ object WheelInjectorMain {
         }
     }
 
-    private fun chunk(pending: Float): Float {
+    private fun chunk(pending: Float, ease: Float): Float {
         if (pending == 0f) return 0f
         val abs = kotlin.math.abs(pending)
-        val c = maxOf(abs * EASE, MIN_CHUNK).coerceAtMost(abs)
+        val c = maxOf(abs * ease, MIN_CHUNK).coerceAtMost(abs)
         return if (pending > 0) c else -c
     }
 

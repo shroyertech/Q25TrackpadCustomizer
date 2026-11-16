@@ -71,6 +71,8 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var checkScrollHorizontal: CheckBox
     private lateinit var checkScrollInvertVertical: CheckBox
     private lateinit var checkScrollInvertHorizontal: CheckBox
+    private lateinit var spinnerScrollSmoothness: Spinner
+    private lateinit var checkScrollAcceleration: CheckBox
 
     // Backup/restore
     private lateinit var btnBackupSettings: Button
@@ -111,6 +113,18 @@ class SettingsActivity : AppCompatActivity() {
         ScrollSensitivity.SLOW,
         ScrollSensitivity.MEDIUM,
         ScrollSensitivity.FAST
+    )
+
+    private val scrollSmoothOptions = listOf(
+        ScrollSmoothness.SNAPPY,
+        ScrollSmoothness.NORMAL,
+        ScrollSmoothness.SMOOTH
+    )
+
+    private val scrollSmoothLabels = listOf(
+        "Snappy",
+        "Normal",
+        "Smooth"
     )
 
     private val scrollSensLabels = listOf(
@@ -225,6 +239,8 @@ class SettingsActivity : AppCompatActivity() {
         checkScrollHorizontal = findViewById(R.id.checkScrollHorizontal)
         checkScrollInvertVertical = findViewById(R.id.checkScrollInvertVertical)
         checkScrollInvertHorizontal = findViewById(R.id.checkScrollInvertHorizontal)
+        spinnerScrollSmoothness = findViewById(R.id.spinnerScrollSmoothness)
+        checkScrollAcceleration = findViewById(R.id.checkScrollAcceleration)
 
         // Backup/restore
         btnBackupSettings = findViewById(R.id.btnBackupSettings)
@@ -333,6 +349,11 @@ class SettingsActivity : AppCompatActivity() {
             checkScrollHorizontal.isChecked = scroll.horizontalEnabled
             checkScrollInvertVertical.isChecked = scroll.invertVertical
             checkScrollInvertHorizontal.isChecked = scroll.invertHorizontal
+            val smoothIdx = scrollSmoothOptions.indexOf(prefs.getScrollSmoothness()).coerceAtLeast(0)
+            if (spinnerScrollSmoothness.selectedItemPosition != smoothIdx) {
+                spinnerScrollSmoothness.setSelection(smoothIdx, false)
+            }
+            checkScrollAcceleration.isChecked = prefs.isScrollAccelerationEnabled()
 
             // Exclusions
             if (::excludedAdapter.isInitialized) {
@@ -1234,6 +1255,23 @@ If you’re using something else, look for a “Superuser / SU” permission lis
         checkScrollInvertHorizontal.setOnCheckedChangeListener { _, isChecked ->
             if (suppressUiListeners) return@setOnCheckedChangeListener
             prefs.setGlobalScrollInvertHorizontal(isChecked)
+        }
+
+        val smoothAdapter = ArrayAdapter(this, AndroidR.layout.simple_spinner_item, scrollSmoothLabels)
+        smoothAdapter.setDropDownViewResource(AndroidR.layout.simple_spinner_dropdown_item)
+        spinnerScrollSmoothness.adapter = smoothAdapter
+        spinnerScrollSmoothness.setSelection(
+            scrollSmoothOptions.indexOf(prefs.getScrollSmoothness()).coerceAtLeast(0), false
+        )
+        spinnerScrollSmoothness.setOnItemSelectedListenerSimple { position ->
+            if (suppressUiListeners) return@setOnItemSelectedListenerSimple
+            prefs.setScrollSmoothness(scrollSmoothOptions[position])
+        }
+
+        checkScrollAcceleration.isChecked = prefs.isScrollAccelerationEnabled()
+        checkScrollAcceleration.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressUiListeners) return@setOnCheckedChangeListener
+            prefs.setScrollAccelerationEnabled(isChecked)
         }
     }
 

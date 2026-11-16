@@ -538,6 +538,20 @@ class Prefs(context: Context) {
         )
     }
 
+    // Real-wheel-only options (global).
+    fun isScrollAccelerationEnabled(): Boolean = prefs.getBoolean(KEY_SCROLL_GLOBAL_ACCEL, true)
+
+    fun setScrollAccelerationEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_SCROLL_GLOBAL_ACCEL, enabled).apply()
+    }
+
+    fun getScrollSmoothness(): ScrollSmoothness =
+        ScrollSmoothness.fromPrefValue(prefs.getInt(KEY_SCROLL_GLOBAL_SMOOTHNESS, ScrollSmoothness.NORMAL.prefValue))
+
+    fun setScrollSmoothness(smoothness: ScrollSmoothness) {
+        prefs.edit().putInt(KEY_SCROLL_GLOBAL_SMOOTHNESS, smoothness.prefValue).apply()
+    }
+
     fun setGlobalScrollSensitivity(sensitivity: ScrollSensitivity) {
         prefs.edit().putInt(KEY_SCROLL_GLOBAL_SENS, sensitivity.prefValue).apply()
     }
@@ -721,6 +735,8 @@ class Prefs(context: Context) {
         private const val KEY_SCROLL_GLOBAL_HORIZONTAL = "scroll_global_horizontal"
         private const val KEY_SCROLL_GLOBAL_INV_V = "scroll_global_inv_v"
         private const val KEY_SCROLL_GLOBAL_INV_H = "scroll_global_inv_h"
+        private const val KEY_SCROLL_GLOBAL_ACCEL = "scroll_global_accel"
+        private const val KEY_SCROLL_GLOBAL_SMOOTHNESS = "scroll_global_smoothness"
 
         private fun keyScrollAppSens(pkg: String) = "scroll_app_sens_$pkg"
         private fun keyScrollAppHorizontal(pkg: String) = "scroll_app_horizontal_$pkg"

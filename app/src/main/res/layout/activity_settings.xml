@@ -489,6 +489,27 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
+        <TextView
+            android:id="@+id/tvScrollSmoothnessLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Smoothness (root wheel scrolling)"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/spinnerScrollSmoothness"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp" />
+
+        <CheckBox
+            android:id="@+id/checkScrollAcceleration"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:text="Acceleration: quick flicks scroll further"
+            android:textSize="12sp" />
+
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
