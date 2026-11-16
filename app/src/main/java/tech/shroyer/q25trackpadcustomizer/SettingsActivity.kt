@@ -621,16 +621,18 @@ class SettingsActivity : AppCompatActivity() {
 
         Thread {
             val result = testRootAccessDetailed()
+            // Detection runs `su -v`, so do it here on the background thread.
+            val mgr = detectRootManager()
             Handler(Looper.getMainLooper()).post {
                 try { progress.dismiss() } catch (_: Exception) {}
 
                 setupPrefs.edit().putBoolean(KEY_ROOT_GRANTED, result.granted).apply()
 
-                val mgr = detectRootManager()
                 val mgrLine = when (mgr) {
                     RootManager.MAGISK -> "Magisk detected."
                     RootManager.KERNELSU -> "KernelSU detected."
-                    RootManager.UNKNOWN -> "Root manager not detected, or hidden (such as KernelSU)."
+                    RootManager.APATCH -> "APatch detected."
+                    RootManager.UNKNOWN -> "Root manager not detected, or hidden."
                 }
 
                 val msg = buildString {
@@ -648,7 +650,7 @@ class SettingsActivity : AppCompatActivity() {
                 val otherHelpLabel = when (mgr) {
                     RootManager.MAGISK -> "Using KernelSU instead?"
                     RootManager.KERNELSU -> "Using Magisk instead?"
-                    RootManager.UNKNOWN -> "More help"
+                    RootManager.APATCH, RootManager.UNKNOWN -> "More help"
                 }
 
                 showScrollableDialog(
@@ -703,36 +705,15 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    private enum class RootManager { MAGISK, KERNELSU, UNKNOWN }
+    private enum class RootManager { MAGISK, KERNELSU, APATCH, UNKNOWN }
 
+    // Blocking (runs `su -v`): only call from a background thread.
     private fun detectRootManager(): RootManager {
-        val pm = packageManager
-
-        val hasMagisk =
-            isPackageInstalled(pm, "com.topjohnwu.magisk") ||
-                    isPackageInstalled(pm, "io.github.vvb2060.magisk")
-
-        val hasKernelSu =
-            isPackageInstalled(pm, "me.weishu.kernelsu")
-
-        return when {
-            hasKernelSu -> RootManager.KERNELSU
-            hasMagisk -> RootManager.MAGISK
-            else -> RootManager.UNKNOWN
-        }
-    }
-
-    private fun isPackageInstalled(pm: PackageManager, pkg: String): Boolean {
-        return try {
-            if (android.os.Build.VERSION.SDK_INT >= 33) {
-                pm.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(0))
-            } else {
-                @Suppress("DEPRECATION")
-                pm.getPackageInfo(pkg, 0)
-            }
-            true
-        } catch (_: Exception) {
-            false
+        return when (RootManagerDetector.detect(this)) {
+            RootManagerDetector.Type.MAGISK -> RootManager.MAGISK
+            RootManagerDetector.Type.KERNELSU -> RootManager.KERNELSU
+            RootManagerDetector.Type.APATCH -> RootManager.APATCH
+            RootManagerDetector.Type.UNKNOWN -> RootManager.UNKNOWN
         }
     }
 
@@ -740,6 +721,7 @@ class SettingsActivity : AppCompatActivity() {
         val managerHint = when (mgr) {
             RootManager.MAGISK -> "Open Magisk > Superuser, find this app, and allow it."
             RootManager.KERNELSU -> "Open KernelSU > Superuser, find this app, and allow it."
+            RootManager.APATCH -> "Open APatch > Superuser, find this app, and allow it."
             RootManager.UNKNOWN -> "Open your root manager’s Superuser list and allow this app."
         }
 

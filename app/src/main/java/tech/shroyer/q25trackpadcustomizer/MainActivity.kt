@@ -604,81 +604,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Blocking (runs `su -v`): only call from a background thread.
     private fun detectRootManager(): RootManager {
-
-        fun hasPkg(pkg: String): Boolean {
-            return try {
-                if (android.os.Build.VERSION.SDK_INT >= 33) {
-                    packageManager.getPackageInfo(
-                        pkg,
-                        PackageManager.PackageInfoFlags.of(0)
-                    )
-                } else {
-                    @Suppress("DEPRECATION")
-                    packageManager.getPackageInfo(pkg, 0)
-                }
-                true
-            } catch (_: Exception) {
-                false
-            }
+        return when (RootManagerDetector.detect(this)) {
+            RootManagerDetector.Type.MAGISK -> RootManager.MAGISK
+            RootManagerDetector.Type.KERNELSU -> RootManager.KERNELSU
+            RootManagerDetector.Type.APATCH, RootManagerDetector.Type.UNKNOWN -> RootManager.OTHER
         }
-
-        fun hasAppLabel(labels: List<String>): Boolean {
-            val pm = packageManager
-            val installedApps = if (android.os.Build.VERSION.SDK_INT >= 33) {
-                pm.getInstalledApplications(
-                    PackageManager.ApplicationInfoFlags.of(0)
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                pm.getInstalledApplications(0)
-            }
-
-            return installedApps.any { app ->
-                val label = app.loadLabel(pm).toString().lowercase()
-                labels.any { label.contains(it) }
-            }
-        }
-
-        // ---- KernelSU ----
-
-        val kernelSuPackages = listOf(
-            "me.weishu.kernelsu",
-            "vaurmet.nfdvv.ztmdui"
-        )
-
-        if (kernelSuPackages.any { hasPkg(it) }) {
-            return RootManager.KERNELSU
-        }
-
-        val kernelSuLabels = listOf(
-            "kernelsu",
-            "kernelsu next"
-        )
-
-        if (hasAppLabel(kernelSuLabels)) {
-            return RootManager.KERNELSU
-        }
-
-        // ---- Magisk ----
-
-        val magiskPackages = listOf(
-            "com.topjohnwu.magisk"
-        )
-
-        if (magiskPackages.any { hasPkg(it) }) {
-            return RootManager.MAGISK
-        }
-
-        val magiskLabels = listOf(
-            "magisk"
-        )
-
-        if (hasAppLabel(magiskLabels)) {
-            return RootManager.MAGISK
-        }
-
-        return RootManager.OTHER
     }
 
     private fun testRootAccessDetailed(): RootAccessResult {
@@ -728,7 +660,7 @@ class MainActivity : AppCompatActivity() {
             RootManager.KERNELSU ->
                 "Open KernelSU > Superuser/App list and allow this app."
             RootManager.OTHER ->
-                "If you use a different root manager, like KernelSU, look for a Superuser/Root access list and allow this app."
+                "If you use a different root manager, like APatch, look for a Superuser/Root access list and allow this app."
         }
 
         val a11yHelpShort =
