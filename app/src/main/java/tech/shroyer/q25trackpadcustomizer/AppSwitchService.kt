@@ -47,7 +47,11 @@ class AppSwitchService : AccessibilityService() {
     private var lastWindowStateChangeUptime: Long = 0L
     private var lastScrollKeyUptime: Long = 0L
 
-    // Continuous-drag scrolling (API 26+); older versions use one swipe per key.
+    // Preferred: real mouse-wheel events through a root helper (native, smooth, no edge gestures).
+    private val wheelInjector: WheelInjector by lazy { WheelInjector(this) }
+
+    // Fallback when the wheel helper isn't available: continuous-drag scrolling (API 26+);
+    // older versions use one swipe per key.
     private val scrollEngine: ScrollGestureEngine? by lazy {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ScrollGestureEngine(this) else null
     }
@@ -136,6 +140,7 @@ class AppSwitchService : AccessibilityService() {
 
     override fun onDestroy() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) scrollEngine?.cancel()
+        wheelInjector.stop()
         stopTextOverrideMonitor()
         mainHandler.removeCallbacks(contentCheckRunnable)
         mainHandler.removeCallbacks(foregroundVerifyRunnable)
@@ -318,7 +323,10 @@ class AppSwitchService : AccessibilityService() {
         onFailure: (() -> Unit)? = null
     ) {
         AppState.currentMode = target
-        if (target != Mode.SCROLL_WHEEL && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        if (target == Mode.SCROLL_WHEEL) {
+            // Get the wheel helper running before the first scroll tick.
+            wheelInjector.ensureStarted()
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             scrollEngine?.cancel()
         }
         TrackpadController.requestMode(target) { ok ->
@@ -983,6 +991,9 @@ class AppSwitchService : AccessibilityService() {
     // ---------- SCROLL HELPERS ----------
 
     private fun scrollVertical(up: Boolean, steps: Int) {
+        // "up" moves the content like a finger dragged up, i.e. reveals what's below:
+        // that's a wheel scroll down (negative VSCROLL).
+        if (wheelScroll(v = if (up) -steps * WHEEL_NOTCHES_PER_STEP else steps * WHEEL_NOTCHES_PER_STEP, h = 0f)) return
         scrollEngine?.let {
             it.scrollVertical(up, steps)
             return
@@ -996,6 +1007,8 @@ class AppSwitchService : AccessibilityService() {
     }
 
     private fun scrollHorizontal(left: Boolean, steps: Int) {
+        // "left" reveals content to the right: positive HSCROLL.
+        if (wheelScroll(v = 0f, h = if (left) steps * WHEEL_NOTCHES_PER_STEP else -steps * WHEEL_NOTCHES_PER_STEP)) return
         scrollEngine?.let {
             it.scrollHorizontal(left, steps)
             return
@@ -1006,6 +1019,11 @@ class AppSwitchService : AccessibilityService() {
         } else {
             scrollHorizontalNodeBased(left, steps)
         }
+    }
+
+    private fun wheelScroll(v: Float, h: Float): Boolean {
+        val dm = resources.displayMetrics
+        return wheelInjector.scroll(dm.widthPixels / 2f, dm.heightPixels / 2f, v, h)
     }
 
     private fun buildGestureStroke(
@@ -1286,6 +1304,7 @@ class AppSwitchService : AccessibilityService() {
         private const val TEXT_RECENT_MS = 1200L
         private const val CONTENT_CHECK_DELAY_MS = 120L
         private const val SCROLL_QUIET_MS = 300L
+        private const val WHEEL_NOTCHES_PER_STEP = 1.0f
         private const val FOREGROUND_VERIFY_DELAY_MS = 250L
         private const val MAX_TREE_NODES = 300
         private const val APP_LABEL_CACHE_MAX = 64
