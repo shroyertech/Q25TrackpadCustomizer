@@ -15,6 +15,18 @@ android {
         versionName = "1.4.2"
     }
 
+    // Fixed debug key checked into the repo, so every debug build (local or CI) is signed
+    // the same way and can be installed over the previous one without uninstalling.
+    // Debug-only; release builds are unaffected.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("ci-debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
