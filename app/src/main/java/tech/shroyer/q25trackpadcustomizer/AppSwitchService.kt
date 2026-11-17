@@ -524,6 +524,7 @@ class AppSwitchService : AccessibilityService() {
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             scrollEngine?.cancel()
         }
+        edgeScroller.updateStrips()
         TrackpadController.requestMode(target) { ok ->
             if (ok) {
                 NotificationHelper.clearRootError(this)
@@ -1231,6 +1232,7 @@ class AppSwitchService : AccessibilityService() {
             PadTapAction.NONE -> Unit
             PadTapAction.QUICK_TOGGLE -> {
                 val next = QuickToggle.perform(this)
+                edgeScroller.updateStrips()
                 if (next == Mode.SCROLL_WHEEL) wheelInjector.ensureStarted()
                 else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) scrollEngine?.cancel()
             }
