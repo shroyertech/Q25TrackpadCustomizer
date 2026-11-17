@@ -120,7 +120,9 @@ class EdgeAutoScroller(
             }
             service.serviceInfo = info
             observingMouse = want
-        } catch (_: Throwable) {
+            android.util.Log.d(TAG, "mouse observation ${if (want) "on" else "off"}")
+        } catch (t: Throwable) {
+            android.util.Log.w(TAG, "mouse observation failed: $t")
             // Not supported on this build: leave mouse events alone.
             if (want) {
                 try {
@@ -164,7 +166,8 @@ class EdgeAutoScroller(
         val y = event.y
         var rx = event.getAxisValue(MotionEvent.AXIS_RELATIVE_X)
         var ry = event.getAxisValue(MotionEvent.AXIS_RELATIVE_Y)
-        if (rx == 0f && ry == 0f && !lastMouseX.isNaN()) {
+        val hadRelative = rx != 0f || ry != 0f
+        if (!hadRelative && !lastMouseX.isNaN()) {
             // No relative axes on this device: fall back to position change.
             rx = x - lastMouseX
             ry = y - lastMouseY
@@ -172,15 +175,34 @@ class EdgeAutoScroller(
         lastMouseX = x
         lastMouseY = y
 
-        val r = windowBounds()
-        val band = edgeBand(r)
+        // Edges are the physical screen edges (what the cursor stops against), plus the
+        // app window's edges when the window is smaller (split screen, freeform).
+        val screen = screenBounds()
+        val win = windowBounds()
+        val band = edgeBand(screen)
+
+        val atBottom = y >= screen.bottom - band || (win.bottom < screen.bottom && y >= win.bottom - band)
+        val atTop = y <= screen.top + band || (win.top > screen.top && y <= win.top + band)
+        val atRight = x >= screen.right - band || (win.right < screen.right && x >= win.right - band)
+        val atLeft = x <= screen.left + band || (win.left > screen.left && x <= win.left + band)
+
+        if (rx == 0f && ry == 0f) {
+            // The cursor is pinned against the edge and the device reports no relative
+            // motion: an event still means the finger moved, so push toward the pinned edge.
+            if (y >= screen.bottom - PINNED_PX) ry = DEFAULT_PUSH
+            else if (y <= screen.top + PINNED_PX) ry = -DEFAULT_PUSH
+            if (x >= screen.right - PINNED_PX) rx = DEFAULT_PUSH
+            else if (x <= screen.left + PINNED_PX) rx = -DEFAULT_PUSH
+        }
 
         var pushX = 0f
         var pushY = 0f
-        if (ry > 0f && y >= r.bottom - band && s.down) pushY = ry
-        else if (ry < 0f && y <= r.top + band && s.up) pushY = ry
-        if (rx > 0f && x >= r.right - band && s.right) pushX = rx
-        else if (rx < 0f && x <= r.left + band && s.left) pushX = rx
+        if (ry > 0f && atBottom && s.down) pushY = ry
+        else if (ry < 0f && atTop && s.up) pushY = ry
+        if (rx > 0f && atRight && s.right) pushX = rx
+        else if (rx < 0f && atLeft && s.left) pushX = rx
+
+        logThrottled(x, y, rx, ry, hadRelative, screen, win, pushX, pushY)
         if (pushX == 0f && pushY == 0f) return
 
         val gain = mouseGain(s.speed)
@@ -188,9 +210,15 @@ class EdgeAutoScroller(
         val v = -pushY * gain / pxPerNotchV
         val h = pushX * gain / pxPerNotchH
 
-        // Aim inside the window (the cursor may be over a bar at the very edge).
-        val px = x.coerceIn(r.left + band * 2, r.right - band * 2)
-        val py = y.coerceIn(r.top + band * 2, r.bottom - band * 2)
+        // Wheel events go to whatever is under the point. At the edge that's usually a
+        // toolbar (e.g. Chrome's bottom address bar) or a system bar, not the page, so aim
+        // at the middle of the window along the scrolling axis and follow the cursor on
+        // the other axis.
+        val inset = band * 2
+        val px = if (pushX != 0f) win.exactCenterX()
+        else x.coerceIn(win.left + inset, win.right - inset)
+        val py = if (pushY != 0f) win.exactCenterY()
+        else y.coerceIn(win.top + inset, win.bottom - inset)
 
         if (wheel.scroll(px, py, v, h, MOUSE_EASE, 0)) return
 
@@ -198,6 +226,48 @@ class EdgeAutoScroller(
         if (now - lastFallbackUptime < FALLBACK_INTERVAL_MS) return
         lastFallbackUptime = now
         fallbackScroll(sign(pushX), sign(pushY))
+    }
+
+    private var lastLogUptime = 0L
+
+    private fun logThrottled(
+        x: Float, y: Float, rx: Float, ry: Float, rel: Boolean,
+        screen: Rect, win: Rect, pushX: Float, pushY: Float
+    ) {
+        val now = SystemClock.uptimeMillis()
+        if (pushX == 0f && pushY == 0f && now - lastLogUptime < 1000L) return
+        if ((pushX != 0f || pushY != 0f) && now - lastLogUptime < 150L) return
+        lastLogUptime = now
+        android.util.Log.d(
+            TAG,
+            "mouse x=$x y=$y rel=($rx,$ry) hasRel=$rel screen=$screen win=$win push=($pushX,$pushY) wheel=${wheel.isReady}"
+        )
+    }
+
+    private val screenRect = Rect()
+
+    /** Full physical screen in the current rotation. */
+    private fun screenBounds(): Rect {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val wm = service.getSystemService(android.view.WindowManager::class.java)
+                screenRect.set(wm.maximumWindowMetrics.bounds)
+                if (!screenRect.isEmpty) return screenRect
+            }
+        } catch (_: Exception) {
+        }
+        try {
+            val dm = android.util.DisplayMetrics()
+            @Suppress("DEPRECATION")
+            (service.getSystemService(android.content.Context.WINDOW_SERVICE) as android.view.WindowManager)
+                .defaultDisplay.getRealMetrics(dm)
+            screenRect.set(0, 0, dm.widthPixels, dm.heightPixels)
+            if (!screenRect.isEmpty) return screenRect
+        } catch (_: Exception) {
+        }
+        val dm = service.resources.displayMetrics
+        screenRect.set(0, 0, dm.widthPixels, dm.heightPixels)
+        return screenRect
     }
 
     // ---------- Keyboard mode ----------
@@ -366,7 +436,10 @@ class EdgeAutoScroller(
     }
 
     companion object {
+        private const val TAG = "Q25EdgeScroll"
         private const val EDGE_BAND_DP = 6f
+        private const val PINNED_PX = 2f
+        private const val DEFAULT_PUSH = 3f
         private const val MOUSE_EASE = 0.5f
         private const val KEY_EASE = 0.3f
         private const val KEY_CHECK_DELAY_MS = 110L
