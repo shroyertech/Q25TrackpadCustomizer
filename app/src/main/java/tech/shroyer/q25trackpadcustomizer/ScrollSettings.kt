@@ -29,6 +29,21 @@ enum class ScrollSmoothness(val prefValue: Int, val ease: Float) {
     }
 }
 
+// Glide after a quick flick stops, like a touch fling (both scroll methods).
+// level is sent to the wheel helper (0 = none ... 3 = longest).
+enum class ScrollInertia(val prefValue: Int, val level: Int) {
+    OFF(0, 0),
+    LOW(1, 1),
+    MEDIUM(2, 2),
+    HIGH(3, 3);
+
+    companion object {
+        fun fromPrefValue(value: Int): ScrollInertia {
+            return values().firstOrNull { it.prefValue == value } ?: MEDIUM
+        }
+    }
+}
+
 // How scroll-wheel mode moves content.
 // WHEEL: real mouse-wheel events through the root helper (falls back to DRAG without root).
 // DRAG: simulated finger drags. Apps see touch swipes, so swipe gestures (e.g. a launcher's

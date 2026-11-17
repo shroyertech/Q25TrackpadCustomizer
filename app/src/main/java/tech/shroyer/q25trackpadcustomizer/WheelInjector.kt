@@ -18,6 +18,7 @@ import java.util.concurrent.Executors
  */
 class WheelInjector(context: Context) {
 
+    private val appContext: Context = context.applicationContext ?: context
     private val apkPath: String = context.applicationInfo.sourceDir
     private val io = Executors.newSingleThreadExecutor { r ->
         Thread(r, "q25-wheel-io").apply { isDaemon = true }
@@ -52,13 +53,14 @@ class WheelInjector(context: Context) {
     /**
      * Queue [v]/[h] wheel notches at screen point ([x], [y]).
      * Positive v scrolls up (toward the top), positive h scrolls right.
+     * [inertia] 0..3: how long scrolling glides on after a quick flick (0 = none).
      */
-    fun scroll(x: Float, y: Float, v: Float, h: Float, ease: Float): Boolean {
+    fun scroll(x: Float, y: Float, v: Float, h: Float, ease: Float, inertia: Int = 0): Boolean {
         if (!isReady) {
             ensureStarted()
             return false
         }
-        val line = "s $x $y $v $h $ease\n"
+        val line = "s $x $y $v $h $ease $inertia\n"
         try {
             io.execute {
                 val w = writer
@@ -120,6 +122,11 @@ class WheelInjector(context: Context) {
             killer.interrupt()
 
             if (line == "ready") {
+                try {
+                    w.write(configLine())
+                    w.flush()
+                } catch (_: Exception) {
+                }
                 process = p
                 writer = w
                 isReady = true
@@ -141,6 +148,31 @@ class WheelInjector(context: Context) {
         } finally {
             starting = false
         }
+    }
+
+    /** Pixels per wheel notch and the display frame period, so the helper emits whole pixels. */
+    private fun configLine(): String {
+        val dm = appContext.resources.displayMetrics
+        var pxV = 64f * dm.density
+        var pxH = 64f * dm.density
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            try {
+                val vc = android.view.ViewConfiguration.get(appContext)
+                pxV = vc.scaledVerticalScrollFactor
+                pxH = vc.scaledHorizontalScrollFactor
+            } catch (_: Exception) {
+            }
+        }
+        var frameMs = 16.667f
+        try {
+            @Suppress("DEPRECATION")
+            val wm = appContext.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
+            @Suppress("DEPRECATION")
+            val hz = wm.defaultDisplay.refreshRate
+            if (hz in 20f..240f) frameMs = 1000f / hz
+        } catch (_: Exception) {
+        }
+        return "c $pxV $pxH $frameMs\n"
     }
 
     private fun onStartFailed() {

@@ -566,6 +566,13 @@ class Prefs(context: Context) {
         prefs.edit().putInt(KEY_SCROLL_GLOBAL_SMOOTHNESS, smoothness.prefValue).apply()
     }
 
+    fun getScrollInertia(): ScrollInertia =
+        ScrollInertia.fromPrefValue(prefs.getInt(KEY_SCROLL_GLOBAL_INERTIA, ScrollInertia.MEDIUM.prefValue))
+
+    fun setScrollInertia(inertia: ScrollInertia) {
+        prefs.edit().putInt(KEY_SCROLL_GLOBAL_INERTIA, inertia.prefValue).apply()
+    }
+
     fun setGlobalScrollSensitivity(sensitivity: ScrollSensitivity) {
         prefs.edit().putInt(KEY_SCROLL_GLOBAL_SENS, sensitivity.prefValue).apply()
     }
@@ -660,6 +667,107 @@ class Prefs(context: Context) {
     fun setAppScrollMethod(packageName: String, method: ScrollMethod) {
         prefs.edit().putInt(keyScrollAppMethod(packageName), method.prefValue).apply()
     }
+
+    // ---- Edge auto-scroll (experimental) ----
+    // Global values plus optional per-app overrides for the on/off switch and each direction.
+    // Overrides are stored only when they differ from global (like other per-app settings).
+
+    fun getGlobalEdgeScrollSettings(): EdgeScrollSettings = EdgeScrollSettings(
+        enabled = prefs.getBoolean(KEY_EDGE_ENABLED, false),
+        up = prefs.getBoolean(KEY_EDGE_UP, true),
+        down = prefs.getBoolean(KEY_EDGE_DOWN, true),
+        left = prefs.getBoolean(KEY_EDGE_LEFT, false),
+        right = prefs.getBoolean(KEY_EDGE_RIGHT, false),
+        inMouseMode = prefs.getBoolean(KEY_EDGE_IN_MOUSE, true),
+        inKeyboardMode = prefs.getBoolean(KEY_EDGE_IN_KEYBOARD, true),
+        speed = ScrollSensitivity.fromPrefValue(prefs.getInt(KEY_EDGE_SPEED, ScrollSensitivity.MEDIUM.prefValue))
+    )
+
+    fun setGlobalEdgeScrollEnabled(v: Boolean) = prefs.edit().putBoolean(KEY_EDGE_ENABLED, v).apply()
+    fun setGlobalEdgeScrollUp(v: Boolean) = prefs.edit().putBoolean(KEY_EDGE_UP, v).apply()
+    fun setGlobalEdgeScrollDown(v: Boolean) = prefs.edit().putBoolean(KEY_EDGE_DOWN, v).apply()
+    fun setGlobalEdgeScrollLeft(v: Boolean) = prefs.edit().putBoolean(KEY_EDGE_LEFT, v).apply()
+    fun setGlobalEdgeScrollRight(v: Boolean) = prefs.edit().putBoolean(KEY_EDGE_RIGHT, v).apply()
+    fun setGlobalEdgeScrollInMouse(v: Boolean) = prefs.edit().putBoolean(KEY_EDGE_IN_MOUSE, v).apply()
+    fun setGlobalEdgeScrollInKeyboard(v: Boolean) = prefs.edit().putBoolean(KEY_EDGE_IN_KEYBOARD, v).apply()
+    fun setGlobalEdgeScrollSpeed(v: ScrollSensitivity) = prefs.edit().putInt(KEY_EDGE_SPEED, v.prefValue).apply()
+
+    private fun appBool(key: String, global: Boolean): Boolean =
+        if (prefs.contains(key)) prefs.getBoolean(key, global) else global
+
+    fun getEffectiveEdgeScrollSettings(packageName: String?): EdgeScrollSettings {
+        val g = getGlobalEdgeScrollSettings()
+        if (packageName.isNullOrEmpty()) return g
+        return g.copy(
+            enabled = appBool(keyEdgeApp("enabled", packageName), g.enabled),
+            up = appBool(keyEdgeApp("up", packageName), g.up),
+            down = appBool(keyEdgeApp("down", packageName), g.down),
+            left = appBool(keyEdgeApp("left", packageName), g.left),
+            right = appBool(keyEdgeApp("right", packageName), g.right)
+        )
+    }
+
+    /** True if edge scrolling could be on for any app (global on, or some app turns it on). */
+    fun isEdgeScrollUsedAnywhere(): Boolean {
+        if (prefs.getBoolean(KEY_EDGE_ENABLED, false)) return true
+        val prefix = "edge_scroll_app_enabled_"
+        return prefs.all.any { (k, v) -> k.startsWith(prefix) && v == true }
+    }
+
+    /** Store per-app values; any that match global are removed so the app follows global. */
+    fun setAppEdgeScroll(
+        packageName: String,
+        enabled: Boolean,
+        up: Boolean,
+        down: Boolean,
+        left: Boolean,
+        right: Boolean
+    ) {
+        val g = getGlobalEdgeScrollSettings()
+        prefs.edit().apply {
+            fun put(name: String, value: Boolean, global: Boolean) {
+                val k = keyEdgeApp(name, packageName)
+                if (value == global) remove(k) else putBoolean(k, value)
+            }
+            put("enabled", enabled, g.enabled)
+            put("up", up, g.up)
+            put("down", down, g.down)
+            put("left", left, g.left)
+            put("right", right, g.right)
+        }.apply()
+    }
+
+    // ---- Double-tap the trackpad to Quick Toggle (experimental) ----
+
+    fun isGlobalPadDoubleTapToggleEnabled(): Boolean = prefs.getBoolean(KEY_PAD_DOUBLE_TAP, false)
+
+    fun setGlobalPadDoubleTapToggleEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_PAD_DOUBLE_TAP, enabled).apply()
+    }
+
+    fun isEffectivePadDoubleTapToggleEnabled(packageName: String?): Boolean {
+        val g = isGlobalPadDoubleTapToggleEnabled()
+        if (packageName.isNullOrEmpty()) return g
+        return appBool(keyPadDoubleTapApp(packageName), g)
+    }
+
+    fun setAppPadDoubleTapToggle(packageName: String, enabled: Boolean) {
+        val k = keyPadDoubleTapApp(packageName)
+        if (enabled == isGlobalPadDoubleTapToggleEnabled()) prefs.edit().remove(k).apply()
+        else prefs.edit().putBoolean(k, enabled).apply()
+    }
+
+    /** True if double-tap could be on for any app (global on, or some app overrides it on). */
+    fun isPadDoubleTapToggleUsedAnywhere(): Boolean {
+        if (isGlobalPadDoubleTapToggleEnabled()) return true
+        return prefs.all.any { (k, v) -> k.startsWith(PREFIX_PAD_DOUBLE_TAP_APP) && v == true }
+    }
+
+    fun registerListener(l: android.content.SharedPreferences.OnSharedPreferenceChangeListener) =
+        prefs.registerOnSharedPreferenceChangeListener(l)
+
+    fun unregisterListener(l: android.content.SharedPreferences.OnSharedPreferenceChangeListener) =
+        prefs.unregisterOnSharedPreferenceChangeListener(l)
 
     // ---- Internal helpers ----
 
@@ -764,6 +872,25 @@ class Prefs(context: Context) {
         private const val KEY_SCROLL_GLOBAL_SMOOTHNESS = "scroll_global_smoothness"
         private const val KEY_SCROLL_GLOBAL_METHOD = "scroll_global_method"
         private const val KEY_SCROLL_HOME_SHORTCUTS = "scroll_home_shortcuts"
+        private const val KEY_SCROLL_GLOBAL_INERTIA = "scroll_global_inertia"
+
+        // Edge auto-scroll (experimental)
+        private const val KEY_EDGE_ENABLED = "edge_scroll_enabled"
+        private const val KEY_EDGE_UP = "edge_scroll_up"
+        private const val KEY_EDGE_DOWN = "edge_scroll_down"
+        private const val KEY_EDGE_LEFT = "edge_scroll_left"
+        private const val KEY_EDGE_RIGHT = "edge_scroll_right"
+        private const val KEY_EDGE_IN_MOUSE = "edge_scroll_in_mouse"
+        private const val KEY_EDGE_IN_KEYBOARD = "edge_scroll_in_keyboard"
+        private const val KEY_EDGE_SPEED = "edge_scroll_speed"
+        private fun keyEdgeApp(name: String, pkg: String) = "edge_scroll_app_${name}_$pkg"
+        const val EDGE_KEY_PREFIX = "edge_scroll_"
+
+        // Double-tap pad to Quick Toggle (experimental)
+        private const val KEY_PAD_DOUBLE_TAP = "pad_double_tap_toggle"
+        private const val PREFIX_PAD_DOUBLE_TAP_APP = "pad_double_tap_toggle_app_"
+        private fun keyPadDoubleTapApp(pkg: String) = "$PREFIX_PAD_DOUBLE_TAP_APP$pkg"
+        const val PAD_DOUBLE_TAP_KEY_PREFIX = "pad_double_tap_toggle"
 
         private fun keyScrollAppSens(pkg: String) = "scroll_app_sens_$pkg"
         private fun keyScrollAppHorizontal(pkg: String) = "scroll_app_horizontal_$pkg"

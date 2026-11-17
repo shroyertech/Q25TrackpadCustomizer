@@ -120,6 +120,14 @@ class AppListAdapter(
         // Auto keyboard
         val checkAutoKeyboard = dialogView.findViewById<CheckBox>(R.id.checkAppAutoKeyboard)
 
+        // Experimental
+        val checkEdge = dialogView.findViewById<CheckBox>(R.id.checkAppEdgeScroll)
+        val checkEdgeUp = dialogView.findViewById<CheckBox>(R.id.checkAppEdgeUp)
+        val checkEdgeDown = dialogView.findViewById<CheckBox>(R.id.checkAppEdgeDown)
+        val checkEdgeLeft = dialogView.findViewById<CheckBox>(R.id.checkAppEdgeLeft)
+        val checkEdgeRight = dialogView.findViewById<CheckBox>(R.id.checkAppEdgeRight)
+        val checkPadDoubleTap = dialogView.findViewById<CheckBox>(R.id.checkAppPadDoubleTap)
+
         // Primary Hold
         val spinnerHold1Mode = dialogView.findViewById<Spinner>(R.id.spinnerAppHoldMode)
         val tvHold1KeyCode = dialogView.findViewById<TextView>(R.id.tvAppHoldKeyCode)
@@ -279,6 +287,25 @@ class AppListAdapter(
 
         // ----- Auto keyboard -----
         checkAutoKeyboard.isChecked = prefs.isEffectiveAutoKeyboardForTextEnabled(app.packageName)
+
+        // ----- Experimental: edge auto-scroll + double-tap toggle -----
+        val edge = prefs.getEffectiveEdgeScrollSettings(app.packageName)
+        checkEdge.isChecked = edge.enabled
+        checkEdgeUp.isChecked = edge.up
+        checkEdgeDown.isChecked = edge.down
+        checkEdgeLeft.isChecked = edge.left
+        checkEdgeRight.isChecked = edge.right
+        val edgeDirs = listOf(checkEdgeUp, checkEdgeDown, checkEdgeLeft, checkEdgeRight)
+        fun updateEdgeDirsState() {
+            val on = checkEdge.isChecked
+            for (c in edgeDirs) {
+                c.isEnabled = on
+                c.alpha = if (on) 1f else 0.5f
+            }
+        }
+        updateEdgeDirsState()
+        checkEdge.setOnCheckedChangeListener { _, _ -> updateEdgeDirsState() }
+        checkPadDoubleTap.isChecked = prefs.isEffectivePadDoubleTapToggleEnabled(app.packageName)
 
         // ----- Hold mode adapters -----
         val holdModeAdapter = ArrayAdapter(
@@ -523,6 +550,16 @@ class AppListAdapter(
                     prefs.setAppScrollInvertVertical(app.packageName, checkInvertV.isChecked)
                     prefs.setAppScrollInvertHorizontal(app.packageName, checkInvertH.isChecked)
                 }
+
+                prefs.setAppEdgeScroll(
+                    app.packageName,
+                    enabled = checkEdge.isChecked,
+                    up = checkEdgeUp.isChecked,
+                    down = checkEdgeDown.isChecked,
+                    left = checkEdgeLeft.isChecked,
+                    right = checkEdgeRight.isChecked
+                )
+                prefs.setAppPadDoubleTapToggle(app.packageName, checkPadDoubleTap.isChecked)
 
                 val desiredAuto = checkAutoKeyboard.isChecked
                 val globalAuto = prefs.isGlobalAutoKeyboardForTextEnabled()

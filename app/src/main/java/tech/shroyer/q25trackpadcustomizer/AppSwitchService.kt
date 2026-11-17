@@ -60,6 +60,25 @@ class AppSwitchService : AccessibilityService() {
 
     private val appLabelCache = HashMap<String, String?>()
 
+    // Experimental: scroll a bit when the cursor / focus reaches the edge (Mouse & Keyboard modes).
+    private val edgeScroller: EdgeAutoScroller by lazy {
+        EdgeAutoScroller(this, prefs, wheelInjector) { dx, dy ->
+            // No root helper: touch-drag fallback, one small step.
+            val engine = scrollEngine
+            if (engine != null) {
+                engine.inertia = 0
+                if (dy != 0) engine.scrollVertical(dy > 0, 1)
+                else if (dx != 0) engine.scrollHorizontal(dx > 0, 1)
+            }
+        }
+    }
+
+    private val prefListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == null || key.startsWith(Prefs.EDGE_KEY_PREFIX)) {
+            mainHandler.post { edgeScroller.refresh() }
+        }
+    }
+
     private var contentCheckScheduled = false
     private val contentCheckRunnable = Runnable {
         contentCheckScheduled = false
@@ -135,12 +154,20 @@ class AppSwitchService : AccessibilityService() {
         // Open the root shell now so the first real switch doesn't pay for it.
         TrackpadController.warmUp()
 
+        prefs.registerListener(prefListener)
+        edgeScroller.refresh()
+
         // Apply the right mode for whatever is already on screen (e.g. after the service
         // was restarted), instead of waiting for the next app switch.
         mainHandler.postDelayed(foregroundVerifyRunnable, 300L)
     }
 
     override fun onDestroy() {
+        try {
+            prefs.unregisterListener(prefListener)
+        } catch (_: Exception) {
+        }
+        edgeScroller.stop()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) scrollEngine?.cancel()
         wheelInjector.stop()
         stopTextOverrideMonitor()
@@ -173,9 +200,14 @@ class AppSwitchService : AccessibilityService() {
                 scheduleContentCheck()
             }
 
+            AccessibilityEvent.TYPE_VIEW_SCROLLED -> {
+                edgeScroller.onViewScrolled()
+            }
+
             AccessibilityEvent.TYPE_VIEW_FOCUSED,
             AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED,
             AccessibilityEvent.TYPE_VIEW_CLICKED -> {
+                if (event.eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED) edgeScroller.onFocusEvent()
                 handleViewFocusedForAutoKeyboard(event)
                 scheduleContentCheck()
             }
@@ -186,6 +218,7 @@ class AppSwitchService : AccessibilityService() {
             }
 
             AccessibilityEvent.TYPE_WINDOWS_CHANGED -> {
+                edgeScroller.onWindowsChanged()
                 if (isActiveWindowChange(event)) scheduleForegroundVerify()
                 scheduleContentCheck()
             }
@@ -198,6 +231,12 @@ class AppSwitchService : AccessibilityService() {
 
     override fun onInterrupt() {
         // No-op
+    }
+
+    // Mouse events arrive here only while edge auto-scroll observes them (Android 15+,
+    // observed = not consumed: the cursor and clicks are unaffected).
+    override fun onMotionEvent(event: android.view.MotionEvent) {
+        edgeScroller.onMouseEvent(event)
     }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
@@ -215,6 +254,8 @@ class AppSwitchService : AccessibilityService() {
             handleEndOfTextInputCheck()
             return false
         }
+
+        edgeScroller.onKeyEvent(event)
 
         if (shouldRemapMetaDpadToPlain(event)) {
             if (event.action == KeyEvent.ACTION_DOWN) {
@@ -1144,6 +1185,7 @@ class AppSwitchService : AccessibilityService() {
         // that's a wheel scroll down (negative VSCROLL).
         if (useWheel && wheelScroll(v = if (up) -notches else notches, h = 0f)) return
         scrollEngine?.let {
+            it.inertia = prefs.getScrollInertia().level
             it.scrollVertical(up, steps)
             return
         }
@@ -1159,6 +1201,7 @@ class AppSwitchService : AccessibilityService() {
         // "left" reveals content to the right: positive HSCROLL.
         if (useWheel && wheelScroll(v = 0f, h = if (left) notches else -notches)) return
         scrollEngine?.let {
+            it.inertia = prefs.getScrollInertia().level
             it.scrollHorizontal(left, steps)
             return
         }
@@ -1203,7 +1246,8 @@ class AppSwitchService : AccessibilityService() {
         return wheelInjector.scroll(
             wheelTargetX, wheelTargetY,
             v * wheelAccel, h * wheelAccel,
-            prefs.getScrollSmoothness().ease
+            prefs.getScrollSmoothness().ease,
+            prefs.getScrollInertia().level
         )
     }
 
@@ -1380,6 +1424,7 @@ class AppSwitchService : AccessibilityService() {
         val prevFg = AppState.currentForegroundPackage
         AppState.currentForegroundPackage = packageName
         val appChanged = prevFg != null && prevFg != packageName
+        if (appChanged) edgeScroller.onWindowsChanged()
 
         val overridePkg = AppState.manualOverrideForPackage
         if (overridePkg != null && overridePkg != packageName) {

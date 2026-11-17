@@ -531,6 +531,142 @@
             android:text="Acceleration: quick flicks scroll further"
             android:textSize="12sp" />
 
+        <TextView
+            android:id="@+id/tvScrollInertiaLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Inertia: glide after a quick flick (wheel and drag)"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/spinnerScrollInertia"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginBottom="8dp"
+            android:background="?android:attr/listDivider" />
+
+        <!-- Experimental -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Experimental"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <CheckBox
+            android:id="@+id/checkEdgeScrollEnabled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Edge auto-scroll (experimental): scroll a bit when the cursor or focus reaches the edge"
+            android:textSize="12sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Directions"
+            android:textSize="12sp"
+            android:layout_marginTop="2dp" />
+
+        <LinearLayout
+            android:id="@+id/layoutEdgeDirections"
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <CheckBox
+                android:id="@+id/checkEdgeScrollUp"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Up"
+                android:textSize="12sp" />
+            <CheckBox
+                android:id="@+id/checkEdgeScrollDown"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Down"
+                android:textSize="12sp" />
+            <CheckBox
+                android:id="@+id/checkEdgeScrollLeft"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Left"
+                android:textSize="12sp" />
+            <CheckBox
+                android:id="@+id/checkEdgeScrollRight"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Right"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/layoutEdgeModes"
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <CheckBox
+                android:id="@+id/checkEdgeScrollInMouse"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="In Mouse mode"
+                android:textSize="12sp" />
+            <CheckBox
+                android:id="@+id/checkEdgeScrollInKeyboard"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="In Keyboard mode"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvEdgeScrollSpeedLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Edge scroll speed"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/spinnerEdgeScrollSpeed"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/tvEdgeScrollNote"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Mouse mode: push against the edge of the screen to scroll. Needs Android 15 or newer. Keyboard mode: scrolls further when the D-pad reaches the edge of the page. Smoothest with root. Each app can override these in its app settings."
+            android:textSize="11sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:layout_marginBottom="8dp" />
+
+        <CheckBox
+            android:id="@+id/checkPadDoubleTapToggle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Double-tap the trackpad to Quick Toggle (experimental)"
+            android:textSize="12sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Tap the pad surface twice (not the click). Cycles modes like the Quick Toggle shortcut, which still works for key mapper apps. Needs root. Each app can override this."
+            android:textSize="11sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:layout_marginBottom="8dp" />
+
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"

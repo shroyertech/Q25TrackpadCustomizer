@@ -18,8 +18,14 @@ import androidx.annotation.RequiresApi
  * Here the finger stays down while keys keep arriving: each key adds distance to a
  * queue, and the next segment is dispatched as a continuation of the same stroke
  * (StrokeDescription.continueStroke) when the previous one finishes, so movement is
- * one smooth drag. After a short idle period the finger is lifted with almost no
- * velocity, so scrolling stops where the user stopped (no extra fling). Each drag starts
+ * one smooth drag. Segment length follows the rate keys arrive at, so the finger is still
+ * moving when the next key lands instead of stopping and starting (which reads as jank,
+ * and also makes the app's velocity tracker see a stopped finger).
+ *
+ * When the keys stop: with [inertia] > 0 the finger is released while still moving at its
+ * current speed, so the app performs its own native fling (the glide the original
+ * one-swipe-per-key version had). With inertia off, the finger is lifted with almost no
+ * velocity after a short idle, so scrolling stops where the user stopped. Each drag starts
  * at the screen centre and stays in the middle band; when it runs out of room it is
  * lifted and a new one starts from the centre.
  */
@@ -38,6 +44,16 @@ class ScrollGestureEngine(private val service: AccessibilityService) {
     private var segmentInFlight = false
     private var pendingDistance = 0f
     private var generation = 0
+
+    // Release-with-fling in progress: new input waits for it, then starts a new finger.
+    private var flingLiftInFlight = false
+    private var lastSegmentMove = 0f
+    private var lastSegmentMs = 0L
+    private var lastEnqueueUptime = 0L
+    private var keyIntervalMs = 0f
+
+    /** 0 = stop dead when input stops; 1..3 = release moving so the app flings (longer = faster release). */
+    var inertia: Int = 0
 
     private val liftRunnable = Runnable { lift() }
 
@@ -60,7 +76,21 @@ class ScrollGestureEngine(private val service: AccessibilityService) {
     private fun enqueue(newAxis: Axis, newDirection: Int, steps: Int) {
         handler.removeCallbacks(liftRunnable)
 
-        if (stroke != null && (newAxis != axis || newDirection != direction)) {
+        val now = android.os.SystemClock.uptimeMillis()
+        val gap = now - lastEnqueueUptime
+        lastEnqueueUptime = now
+        keyIntervalMs = when {
+            gap > BURST_GAP_MS -> 0f
+            keyIntervalMs == 0f -> gap.toFloat()
+            else -> keyIntervalMs * 0.6f + gap * 0.4f
+        }
+
+        val directionChanged = newAxis != axis || newDirection != direction
+        if (directionChanged && flingLiftInFlight) {
+            // The release is already on its way; drop queued travel in the old direction.
+            pendingDistance = 0f
+        }
+        if (stroke != null && directionChanged) {
             // Direction change: lift the current finger and start fresh.
             lift()
         }
@@ -69,7 +99,7 @@ class ScrollGestureEngine(private val service: AccessibilityService) {
         direction = newDirection
         pendingDistance += stepDistance(newAxis) * steps.coerceAtLeast(1)
 
-        if (!segmentInFlight) dispatchNextSegment()
+        if (!segmentInFlight && !flingLiftInFlight) dispatchNextSegment()
     }
 
     private fun stepDistance(a: Axis): Float {
@@ -81,7 +111,7 @@ class ScrollGestureEngine(private val service: AccessibilityService) {
     private fun dispatchNextSegment() {
         val a = axis ?: return
         if (pendingDistance <= 0f) {
-            scheduleLift()
+            if (inertia > 0 && stroke != null) flingLift() else scheduleLift()
             return
         }
 
@@ -118,7 +148,12 @@ class ScrollGestureEngine(private val service: AccessibilityService) {
             lineTo(endX, endY)
         }
 
-        val duration = (move / (max - min) * FULL_TRAVEL_MS).toLong().coerceIn(MIN_SEGMENT_MS, MAX_SEGMENT_MS)
+        var duration = (move / (max - min) * FULL_TRAVEL_MS).toLong().coerceIn(MIN_SEGMENT_MS, MAX_SEGMENT_MS)
+        // Keep the finger moving until about when the next key is due.
+        if (keyIntervalMs > 0f) {
+            val cadence = (keyIntervalMs * 1.15f).toLong().coerceAtMost(MAX_CADENCE_SEGMENT_MS)
+            if (cadence > duration) duration = cadence
+        }
         val next = try {
             if (current == null) {
                 GestureDescription.StrokeDescription(path, 0, duration, true)
@@ -133,6 +168,8 @@ class ScrollGestureEngine(private val service: AccessibilityService) {
         stroke = next
         fingerX = endX
         fingerY = endY
+        lastSegmentMove = move
+        lastSegmentMs = duration
         segmentInFlight = true
         val gen = generation
 
@@ -166,6 +203,7 @@ class ScrollGestureEngine(private val service: AccessibilityService) {
         generation++
         stroke = null
         segmentInFlight = false
+        flingLiftInFlight = false
         pendingDistance = 0f
         if (current == null) return
 
@@ -178,6 +216,63 @@ class ScrollGestureEngine(private val service: AccessibilityService) {
             service.dispatchGesture(GestureDescription.Builder().addStroke(end).build(), null, handler)
         } catch (_: Exception) {
         }
+    }
+
+    /**
+     * Release the finger while it is still moving at the current speed, so the app's own
+     * velocity tracker sees a flick and flings. Input that arrives meanwhile is queued and
+     * continues with a new finger once the release lands (like catching a fling).
+     */
+    private fun flingLift() {
+        val current = stroke ?: return
+        val a = axis ?: return
+        val dm = service.resources.displayMetrics
+        val w = dm.widthPixels.toFloat()
+        val h = dm.heightPixels.toFloat()
+
+        val speed = if (lastSegmentMs > 0) lastSegmentMove / lastSegmentMs else 0f // px per ms
+        val gain = FLING_RELEASE_GAIN[inertia.coerceIn(0, FLING_RELEASE_GAIN.size - 1)]
+        val pos = if (a == Axis.VERTICAL) fingerY else fingerX
+        val limit = if (a == Axis.VERTICAL) h else w
+        // Stay on screen: at most up to 2% from the edge.
+        val room = if (direction < 0) pos - limit * 0.02f else limit * 0.98f - pos
+        val dist = (speed * gain * FLING_TAIL_MS).coerceIn(0.5f, room.coerceAtLeast(0.5f))
+
+        val endX = if (a == Axis.HORIZONTAL) fingerX + direction * dist else fingerX
+        val endY = if (a == Axis.VERTICAL) fingerY + direction * dist else fingerY
+        val path = Path().apply {
+            moveTo(fingerX, fingerY)
+            lineTo(endX, endY)
+        }
+
+        generation++
+        val gen = generation
+        stroke = null
+        segmentInFlight = false
+        flingLiftInFlight = true
+
+        val end = try {
+            current.continueStroke(path, 0, FLING_TAIL_MS, false)
+        } catch (_: Exception) {
+            flingLiftInFlight = false
+            reset()
+            return
+        }
+
+        val after = Runnable {
+            if (gen != generation) return@Runnable
+            flingLiftInFlight = false
+            if (pendingDistance > 0f && !segmentInFlight) dispatchNextSegment()
+        }
+        val ok = service.dispatchGesture(
+            GestureDescription.Builder().addStroke(end).build(),
+            object : AccessibilityService.GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription?) = after.run()
+                override fun onCancelled(gestureDescription: GestureDescription?) = after.run()
+            },
+            handler
+        )
+        if (!ok) after.run()
     }
 
     private fun liftThenContinue() {
@@ -199,6 +294,7 @@ class ScrollGestureEngine(private val service: AccessibilityService) {
     }
 
     private fun reset() {
+        flingLiftInFlight = false
         generation++
         stroke = null
         segmentInFlight = false
@@ -220,5 +316,11 @@ class ScrollGestureEngine(private val service: AccessibilityService) {
         private const val MAX_SEGMENT_MS = 250L
         private const val IDLE_LIFT_MS = 140L
         private const val LIFT_MS = 40L
+        // Keys further apart than this start a new burst (cadence tracking restarts).
+        private const val BURST_GAP_MS = 180L
+        private const val MAX_CADENCE_SEGMENT_MS = 110L
+        // Release segment that carries the finger's speed into the app's fling.
+        private const val FLING_TAIL_MS = 24L
+        private val FLING_RELEASE_GAIN = floatArrayOf(0f, 0.6f, 0.85f, 1.1f)
     }
 }

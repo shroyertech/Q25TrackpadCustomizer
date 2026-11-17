@@ -11,8 +11,8 @@ android {
         applicationId = "tech.shroyer.q25trackpadcustomizer"
         minSdk = 21
         targetSdk = 34
-        versionCode = 9
-        versionName = "1.4.10"
+        versionCode = 10
+        versionName = "1.4.11"
     }
 
     // Fixed debug key checked into the repo, so every debug build (local or CI) is signed

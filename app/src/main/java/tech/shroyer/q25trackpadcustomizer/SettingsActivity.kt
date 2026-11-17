@@ -75,6 +75,18 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var spinnerScrollMethod: Spinner
     private lateinit var checkScrollHomeShortcuts: CheckBox
     private lateinit var checkScrollAcceleration: CheckBox
+    private lateinit var spinnerScrollInertia: Spinner
+
+    // Experimental
+    private lateinit var checkEdgeScrollEnabled: CheckBox
+    private lateinit var checkEdgeScrollUp: CheckBox
+    private lateinit var checkEdgeScrollDown: CheckBox
+    private lateinit var checkEdgeScrollLeft: CheckBox
+    private lateinit var checkEdgeScrollRight: CheckBox
+    private lateinit var checkEdgeScrollInMouse: CheckBox
+    private lateinit var checkEdgeScrollInKeyboard: CheckBox
+    private lateinit var spinnerEdgeScrollSpeed: Spinner
+    private lateinit var checkPadDoubleTapToggle: CheckBox
 
     // Backup/restore
     private lateinit var btnBackupSettings: Button
@@ -127,6 +139,20 @@ class SettingsActivity : AppCompatActivity() {
         "Snappy",
         "Normal",
         "Smooth"
+    )
+
+    private val scrollInertiaOptions = listOf(
+        ScrollInertia.OFF,
+        ScrollInertia.LOW,
+        ScrollInertia.MEDIUM,
+        ScrollInertia.HIGH
+    )
+
+    private val scrollInertiaLabels = listOf(
+        "Off (stop where you stop)",
+        "Low",
+        "Medium",
+        "High"
     )
 
     private val scrollMethodOptions = listOf(
@@ -255,6 +281,16 @@ class SettingsActivity : AppCompatActivity() {
         spinnerScrollMethod = findViewById(R.id.spinnerScrollMethod)
         checkScrollHomeShortcuts = findViewById(R.id.checkScrollHomeShortcuts)
         checkScrollAcceleration = findViewById(R.id.checkScrollAcceleration)
+        spinnerScrollInertia = findViewById(R.id.spinnerScrollInertia)
+        checkEdgeScrollEnabled = findViewById(R.id.checkEdgeScrollEnabled)
+        checkEdgeScrollUp = findViewById(R.id.checkEdgeScrollUp)
+        checkEdgeScrollDown = findViewById(R.id.checkEdgeScrollDown)
+        checkEdgeScrollLeft = findViewById(R.id.checkEdgeScrollLeft)
+        checkEdgeScrollRight = findViewById(R.id.checkEdgeScrollRight)
+        checkEdgeScrollInMouse = findViewById(R.id.checkEdgeScrollInMouse)
+        checkEdgeScrollInKeyboard = findViewById(R.id.checkEdgeScrollInKeyboard)
+        spinnerEdgeScrollSpeed = findViewById(R.id.spinnerEdgeScrollSpeed)
+        checkPadDoubleTapToggle = findViewById(R.id.checkPadDoubleTapToggle)
 
         // Backup/restore
         btnBackupSettings = findViewById(R.id.btnBackupSettings)
@@ -282,6 +318,7 @@ class SettingsActivity : AppCompatActivity() {
         setupAutoKeyboardForText()
         setupHoldKeySettings()
         setupGlobalScrollSettings()
+        setupExperimentalSettings()
         setupExcludedAppsSection()
     }
 
@@ -373,6 +410,13 @@ class SettingsActivity : AppCompatActivity() {
                 spinnerScrollMethod.setSelection(methodIdx, false)
             }
             checkScrollHomeShortcuts.isChecked = prefs.isScrollHomeShortcutsEnabled()
+            val inertiaIdx = scrollInertiaOptions.indexOf(prefs.getScrollInertia()).coerceAtLeast(0)
+            if (spinnerScrollInertia.selectedItemPosition != inertiaIdx) {
+                spinnerScrollInertia.setSelection(inertiaIdx, false)
+            }
+
+            // Experimental
+            applyExperimentalUiFromPrefs()
 
             // Exclusions
             if (::excludedAdapter.isInitialized) {
@@ -1306,6 +1350,84 @@ If you’re using something else, look for a “Superuser / SU” permission lis
         checkScrollHomeShortcuts.setOnCheckedChangeListener { _, isChecked ->
             if (suppressUiListeners) return@setOnCheckedChangeListener
             prefs.setScrollHomeShortcutsEnabled(isChecked)
+        }
+
+        val inertiaAdapter = ArrayAdapter(this, AndroidR.layout.simple_spinner_item, scrollInertiaLabels)
+        inertiaAdapter.setDropDownViewResource(AndroidR.layout.simple_spinner_dropdown_item)
+        spinnerScrollInertia.adapter = inertiaAdapter
+        spinnerScrollInertia.setSelection(
+            scrollInertiaOptions.indexOf(prefs.getScrollInertia()).coerceAtLeast(0), false
+        )
+        spinnerScrollInertia.setOnItemSelectedListenerSimple { position ->
+            if (suppressUiListeners) return@setOnItemSelectedListenerSimple
+            prefs.setScrollInertia(scrollInertiaOptions[position])
+        }
+    }
+
+    // ---------- Experimental ----------
+
+    private fun applyExperimentalUiFromPrefs() {
+        val e = prefs.getGlobalEdgeScrollSettings()
+        checkEdgeScrollEnabled.isChecked = e.enabled
+        checkEdgeScrollUp.isChecked = e.up
+        checkEdgeScrollDown.isChecked = e.down
+        checkEdgeScrollLeft.isChecked = e.left
+        checkEdgeScrollRight.isChecked = e.right
+        checkEdgeScrollInMouse.isChecked = e.inMouseMode
+        checkEdgeScrollInKeyboard.isChecked = e.inKeyboardMode
+        val speedIdx = scrollSensOptions.indexOf(e.speed).coerceAtLeast(0)
+        if (spinnerEdgeScrollSpeed.adapter != null && spinnerEdgeScrollSpeed.selectedItemPosition != speedIdx) {
+            spinnerEdgeScrollSpeed.setSelection(speedIdx, false)
+        }
+        checkPadDoubleTapToggle.isChecked = prefs.isGlobalPadDoubleTapToggleEnabled()
+        updateEdgeScrollEnabledState()
+    }
+
+    private fun updateEdgeScrollEnabledState() {
+        val on = checkEdgeScrollEnabled.isChecked
+        val alpha = if (on) 1f else 0.5f
+        for (v in listOf(
+            checkEdgeScrollUp, checkEdgeScrollDown, checkEdgeScrollLeft, checkEdgeScrollRight,
+            checkEdgeScrollInMouse, checkEdgeScrollInKeyboard, spinnerEdgeScrollSpeed
+        )) {
+            v.isEnabled = on
+            v.alpha = alpha
+        }
+    }
+
+    private fun setupExperimentalSettings() {
+        val speedAdapter = ArrayAdapter(this, AndroidR.layout.simple_spinner_item, scrollSensLabels)
+        speedAdapter.setDropDownViewResource(AndroidR.layout.simple_spinner_dropdown_item)
+        spinnerEdgeScrollSpeed.adapter = speedAdapter
+
+        suppressUiListeners = true
+        try {
+            applyExperimentalUiFromPrefs()
+        } finally {
+            suppressUiListeners = false
+        }
+
+        fun bind(cb: CheckBox, save: (Boolean) -> Unit) {
+            cb.setOnCheckedChangeListener { _, isChecked ->
+                if (suppressUiListeners) return@setOnCheckedChangeListener
+                save(isChecked)
+            }
+        }
+        bind(checkEdgeScrollEnabled) {
+            prefs.setGlobalEdgeScrollEnabled(it)
+            updateEdgeScrollEnabledState()
+        }
+        bind(checkEdgeScrollUp) { prefs.setGlobalEdgeScrollUp(it) }
+        bind(checkEdgeScrollDown) { prefs.setGlobalEdgeScrollDown(it) }
+        bind(checkEdgeScrollLeft) { prefs.setGlobalEdgeScrollLeft(it) }
+        bind(checkEdgeScrollRight) { prefs.setGlobalEdgeScrollRight(it) }
+        bind(checkEdgeScrollInMouse) { prefs.setGlobalEdgeScrollInMouse(it) }
+        bind(checkEdgeScrollInKeyboard) { prefs.setGlobalEdgeScrollInKeyboard(it) }
+        bind(checkPadDoubleTapToggle) { prefs.setGlobalPadDoubleTapToggleEnabled(it) }
+
+        spinnerEdgeScrollSpeed.setOnItemSelectedListenerSimple { position ->
+            if (suppressUiListeners) return@setOnItemSelectedListenerSimple
+            prefs.setGlobalEdgeScrollSpeed(scrollSensOptions[position])
         }
     }
 

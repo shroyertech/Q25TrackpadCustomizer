@@ -290,6 +290,73 @@
             android:background="?android:attr/listDivider"
             android:layout_marginBottom="10dp" />
 
+        <!-- EXPERIMENTAL (PER-APP) -->
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Experimental"
+            android:textStyle="bold"
+            android:textSize="14sp"
+            android:layout_marginBottom="4dp" />
+
+        <CheckBox
+            android:id="@+id/checkAppEdgeScroll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Edge auto-scroll (Mouse / Keyboard mode)"
+            android:textSize="12sp" />
+
+        <LinearLayout
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp">
+
+            <CheckBox
+                android:id="@+id/checkAppEdgeUp"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Up"
+                android:textSize="12sp" />
+            <CheckBox
+                android:id="@+id/checkAppEdgeDown"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Down"
+                android:textSize="12sp" />
+            <CheckBox
+                android:id="@+id/checkAppEdgeLeft"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Left"
+                android:textSize="12sp" />
+            <CheckBox
+                android:id="@+id/checkAppEdgeRight"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Right"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <CheckBox
+            android:id="@+id/checkAppPadDoubleTap"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Double-tap the trackpad to Quick Toggle"
+            android:textSize="12sp"
+            android:layout_marginBottom="10dp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="?android:attr/listDivider"
+            android:layout_marginBottom="10dp" />
+
         <!-- AUTO KEYBOARD (PER-APP) -->
 
         <CheckBox
