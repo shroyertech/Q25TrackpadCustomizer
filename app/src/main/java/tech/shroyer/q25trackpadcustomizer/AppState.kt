@@ -17,6 +17,13 @@ object AppState {
     @Volatile
     var rootErrorShown: Boolean = false
 
+    // Diagnostics for experimental features, shown in Settings.
+    @Volatile
+    var edgeScrollStatus: String = "Accessibility service not running"
+
+    @Volatile
+    var padTapStatus: String = "Accessibility service not running"
+
     // ---- Text-input override ----
 
     @Volatile

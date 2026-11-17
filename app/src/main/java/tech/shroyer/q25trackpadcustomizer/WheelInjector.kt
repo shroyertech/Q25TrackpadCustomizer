@@ -20,6 +20,7 @@ class WheelInjector(context: Context) {
 
     private val appContext: Context = context.applicationContext ?: context
     private val apkPath: String = context.applicationInfo.sourceDir
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val io = Executors.newSingleThreadExecutor { r ->
         Thread(r, "q25-wheel-io").apply { isDaemon = true }
     }
@@ -81,6 +82,47 @@ class WheelInjector(context: Context) {
         return true
     }
 
+    /** Lines the helper prints after start ("tap 2", "pad ..."), delivered on the main thread. */
+    @Volatile
+    var onHelperLine: ((String) -> Unit)? = null
+
+    @Volatile
+    private var tapDetection = false
+
+    /** Turn trackpad tap detection on/off (remembered across helper restarts). */
+    fun setTapDetection(on: Boolean) {
+        tapDetection = on
+        if (on) ensureStarted()
+        send("t ${if (on) 1 else 0}\n")
+    }
+
+    /** Click at the cursor: 1..3 left clicks, 0 = right click. */
+    fun click(count: Int): Boolean = send("k $count\n")
+
+    /** Inject a key press (e.g. for key mapper apps). */
+    fun key(keyCode: Int): Boolean = send("e $keyCode\n")
+
+    private fun send(line: String): Boolean {
+        if (!isReady) {
+            ensureStarted()
+            return false
+        }
+        try {
+            io.execute {
+                val w = writer ?: return@execute
+                try {
+                    w.write(line)
+                    w.flush()
+                } catch (_: Exception) {
+                    onDied()
+                }
+            }
+        } catch (_: Exception) {
+            return false
+        }
+        return true
+    }
+
     fun stop() {
         try {
             io.execute {
@@ -124,6 +166,7 @@ class WheelInjector(context: Context) {
             if (line == "ready") {
                 try {
                     w.write(configLine())
+                    if (tapDetection) w.write("t 1\n")
                     w.flush()
                 } catch (_: Exception) {
                 }
@@ -134,7 +177,11 @@ class WheelInjector(context: Context) {
                 // Drain any later output so the pipe never fills; mark dead on exit.
                 Thread {
                     try {
-                        while (r.readLine() != null) { /* discard */ }
+                        while (true) {
+                            val out = r.readLine() ?: break
+                            val cb = onHelperLine ?: continue
+                            mainHandler.post { cb(out) }
+                        }
                     } catch (_: Exception) {
                     }
                     onDied()

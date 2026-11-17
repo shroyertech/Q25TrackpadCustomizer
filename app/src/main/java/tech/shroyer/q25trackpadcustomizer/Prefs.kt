@@ -737,30 +737,57 @@ class Prefs(context: Context) {
         }.apply()
     }
 
-    // ---- Double-tap the trackpad to Quick Toggle (experimental) ----
+    // ---- Trackpad tap gestures (experimental) ----
+    // Global on/off + double/triple tap actions, each with optional per-app overrides.
 
-    fun isGlobalPadDoubleTapToggleEnabled(): Boolean = prefs.getBoolean(KEY_PAD_DOUBLE_TAP, false)
+    fun getGlobalPadGestureSettings(): PadGestureSettings = PadGestureSettings(
+        enabled = prefs.getBoolean(KEY_PAD_GESTURES, false),
+        doubleTap = PadTapAction.fromPrefValue(
+            prefs.getInt(KEY_PAD_DOUBLE_ACTION, PadTapAction.QUICK_TOGGLE.prefValue), PadTapAction.QUICK_TOGGLE
+        ),
+        tripleTap = PadTapAction.fromPrefValue(
+            prefs.getInt(KEY_PAD_TRIPLE_ACTION, PadTapAction.NONE.prefValue), PadTapAction.NONE
+        )
+    )
 
-    fun setGlobalPadDoubleTapToggleEnabled(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_PAD_DOUBLE_TAP, enabled).apply()
+    fun setGlobalPadGesturesEnabled(v: Boolean) = prefs.edit().putBoolean(KEY_PAD_GESTURES, v).apply()
+    fun setGlobalPadDoubleTapAction(a: PadTapAction) = prefs.edit().putInt(KEY_PAD_DOUBLE_ACTION, a.prefValue).apply()
+    fun setGlobalPadTripleTapAction(a: PadTapAction) = prefs.edit().putInt(KEY_PAD_TRIPLE_ACTION, a.prefValue).apply()
+
+    /** Per-app action override, or null to follow global. */
+    fun getAppPadTapActionOverride(packageName: String, taps: Int): PadTapAction? {
+        val k = keyPadAppAction(taps, packageName)
+        if (!prefs.contains(k)) return null
+        return PadTapAction.values().firstOrNull { it.prefValue == prefs.getInt(k, -1) }
     }
 
-    fun isEffectivePadDoubleTapToggleEnabled(packageName: String?): Boolean {
-        val g = isGlobalPadDoubleTapToggleEnabled()
+    fun getEffectivePadGestureSettings(packageName: String?): PadGestureSettings {
+        val g = getGlobalPadGestureSettings()
         if (packageName.isNullOrEmpty()) return g
-        return appBool(keyPadDoubleTapApp(packageName), g)
+        return PadGestureSettings(
+            enabled = appBool(keyPadAppEnabled(packageName), g.enabled),
+            doubleTap = getAppPadTapActionOverride(packageName, 2) ?: g.doubleTap,
+            tripleTap = getAppPadTapActionOverride(packageName, 3) ?: g.tripleTap
+        )
     }
 
-    fun setAppPadDoubleTapToggle(packageName: String, enabled: Boolean) {
-        val k = keyPadDoubleTapApp(packageName)
-        if (enabled == isGlobalPadDoubleTapToggleEnabled()) prefs.edit().remove(k).apply()
-        else prefs.edit().putBoolean(k, enabled).apply()
+    /** [doubleTap]/[tripleTap] null = follow global. Enabled is stored only if it differs from global. */
+    fun setAppPadGestures(packageName: String, enabled: Boolean, doubleTap: PadTapAction?, tripleTap: PadTapAction?) {
+        val g = getGlobalPadGestureSettings()
+        prefs.edit().apply {
+            val ek = keyPadAppEnabled(packageName)
+            if (enabled == g.enabled) remove(ek) else putBoolean(ek, enabled)
+            val dk = keyPadAppAction(2, packageName)
+            if (doubleTap == null) remove(dk) else putInt(dk, doubleTap.prefValue)
+            val tk = keyPadAppAction(3, packageName)
+            if (tripleTap == null) remove(tk) else putInt(tk, tripleTap.prefValue)
+        }.apply()
     }
 
-    /** True if double-tap could be on for any app (global on, or some app overrides it on). */
-    fun isPadDoubleTapToggleUsedAnywhere(): Boolean {
-        if (isGlobalPadDoubleTapToggleEnabled()) return true
-        return prefs.all.any { (k, v) -> k.startsWith(PREFIX_PAD_DOUBLE_TAP_APP) && v == true }
+    /** True if tap gestures could be on for any app (global on, or some app turns them on). */
+    fun isPadGesturesUsedAnywhere(): Boolean {
+        if (prefs.getBoolean(KEY_PAD_GESTURES, false)) return true
+        return prefs.all.any { (k, v) -> k.startsWith(PREFIX_PAD_APP_ENABLED) && v == true }
     }
 
     fun registerListener(l: android.content.SharedPreferences.OnSharedPreferenceChangeListener) =
@@ -886,11 +913,15 @@ class Prefs(context: Context) {
         private fun keyEdgeApp(name: String, pkg: String) = "edge_scroll_app_${name}_$pkg"
         const val EDGE_KEY_PREFIX = "edge_scroll_"
 
-        // Double-tap pad to Quick Toggle (experimental)
-        private const val KEY_PAD_DOUBLE_TAP = "pad_double_tap_toggle"
-        private const val PREFIX_PAD_DOUBLE_TAP_APP = "pad_double_tap_toggle_app_"
-        private fun keyPadDoubleTapApp(pkg: String) = "$PREFIX_PAD_DOUBLE_TAP_APP$pkg"
-        const val PAD_DOUBLE_TAP_KEY_PREFIX = "pad_double_tap_toggle"
+        // Trackpad tap gestures (experimental)
+        private const val KEY_PAD_GESTURES = "pad_gestures_enabled"
+        private const val KEY_PAD_DOUBLE_ACTION = "pad_gestures_double_action"
+        private const val KEY_PAD_TRIPLE_ACTION = "pad_gestures_triple_action"
+        private const val PREFIX_PAD_APP_ENABLED = "pad_gestures_app_enabled_"
+        private fun keyPadAppEnabled(pkg: String) = "$PREFIX_PAD_APP_ENABLED$pkg"
+        private fun keyPadAppAction(taps: Int, pkg: String) =
+            if (taps == 3) "pad_gestures_app_triple_$pkg" else "pad_gestures_app_double_$pkg"
+        const val PAD_GESTURES_KEY_PREFIX = "pad_gestures_"
 
         private fun keyScrollAppSens(pkg: String) = "scroll_app_sens_$pkg"
         private fun keyScrollAppHorizontal(pkg: String) = "scroll_app_horizontal_$pkg"

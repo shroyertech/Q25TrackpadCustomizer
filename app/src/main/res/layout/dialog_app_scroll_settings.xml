@@ -344,11 +344,33 @@
         </LinearLayout>
 
         <CheckBox
-            android:id="@+id/checkAppPadDoubleTap"
+            android:id="@+id/checkAppPadGestures"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Double-tap the trackpad to Quick Toggle"
-            android:textSize="12sp"
+            android:text="Trackpad tap gestures (Mouse mode)"
+            android:textSize="12sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Double tap"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/spinnerAppPadDoubleTap"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Triple tap"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/spinnerAppPadTripleTap"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:layout_marginBottom="10dp" />
 
         <View

@@ -86,7 +86,12 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var checkEdgeScrollInMouse: CheckBox
     private lateinit var checkEdgeScrollInKeyboard: CheckBox
     private lateinit var spinnerEdgeScrollSpeed: Spinner
-    private lateinit var checkPadDoubleTapToggle: CheckBox
+    private lateinit var checkPadGestures: CheckBox
+    private lateinit var spinnerPadDoubleTap: Spinner
+    private lateinit var spinnerPadTripleTap: Spinner
+    private lateinit var tvEdgeScrollStatus: TextView
+    private lateinit var tvPadTapStatus: TextView
+    private val padTapOptions = PadTapAction.values().toList()
 
     // Backup/restore
     private lateinit var btnBackupSettings: Button
@@ -290,7 +295,11 @@ class SettingsActivity : AppCompatActivity() {
         checkEdgeScrollInMouse = findViewById(R.id.checkEdgeScrollInMouse)
         checkEdgeScrollInKeyboard = findViewById(R.id.checkEdgeScrollInKeyboard)
         spinnerEdgeScrollSpeed = findViewById(R.id.spinnerEdgeScrollSpeed)
-        checkPadDoubleTapToggle = findViewById(R.id.checkPadDoubleTapToggle)
+        checkPadGestures = findViewById(R.id.checkPadGestures)
+        spinnerPadDoubleTap = findViewById(R.id.spinnerPadDoubleTap)
+        spinnerPadTripleTap = findViewById(R.id.spinnerPadTripleTap)
+        tvEdgeScrollStatus = findViewById(R.id.tvEdgeScrollStatus)
+        tvPadTapStatus = findViewById(R.id.tvPadTapStatus)
 
         // Backup/restore
         btnBackupSettings = findViewById(R.id.btnBackupSettings)
@@ -1379,8 +1388,27 @@ If you’re using something else, look for a “Superuser / SU” permission lis
         if (spinnerEdgeScrollSpeed.adapter != null && spinnerEdgeScrollSpeed.selectedItemPosition != speedIdx) {
             spinnerEdgeScrollSpeed.setSelection(speedIdx, false)
         }
-        checkPadDoubleTapToggle.isChecked = prefs.isGlobalPadDoubleTapToggleEnabled()
+        val pad = prefs.getGlobalPadGestureSettings()
+        checkPadGestures.isChecked = pad.enabled
+        if (spinnerPadDoubleTap.adapter != null) {
+            spinnerPadDoubleTap.setSelection(padTapOptions.indexOf(pad.doubleTap).coerceAtLeast(0), false)
+            spinnerPadTripleTap.setSelection(padTapOptions.indexOf(pad.tripleTap).coerceAtLeast(0), false)
+        }
         updateEdgeScrollEnabledState()
+        updateExperimentalStatus()
+    }
+
+    private fun updateExperimentalStatus() {
+        tvEdgeScrollStatus.text = "Status: ${AppState.edgeScrollStatus}"
+        tvPadTapStatus.text = "Status: ${AppState.padTapStatus}"
+    }
+
+    private fun updatePadGesturesEnabledState() {
+        val on = checkPadGestures.isChecked
+        for (v in listOf(spinnerPadDoubleTap, spinnerPadTripleTap)) {
+            v.isEnabled = on
+            v.alpha = if (on) 1f else 0.5f
+        }
     }
 
     private fun updateEdgeScrollEnabledState() {
@@ -1396,6 +1424,12 @@ If you’re using something else, look for a “Superuser / SU” permission lis
     }
 
     private fun setupExperimentalSettings() {
+        for (sp in listOf(spinnerPadDoubleTap, spinnerPadTripleTap)) {
+            val a = ArrayAdapter(this, AndroidR.layout.simple_spinner_item, padTapOptions.map { it.label })
+            a.setDropDownViewResource(AndroidR.layout.simple_spinner_dropdown_item)
+            sp.adapter = a
+        }
+
         val speedAdapter = ArrayAdapter(this, AndroidR.layout.simple_spinner_item, scrollSensLabels)
         speedAdapter.setDropDownViewResource(AndroidR.layout.simple_spinner_dropdown_item)
         spinnerEdgeScrollSpeed.adapter = speedAdapter
@@ -1416,6 +1450,7 @@ If you’re using something else, look for a “Superuser / SU” permission lis
         bind(checkEdgeScrollEnabled) {
             prefs.setGlobalEdgeScrollEnabled(it)
             updateEdgeScrollEnabledState()
+            checkEdgeScrollEnabled.postDelayed({ updateExperimentalStatus() }, 1500)
         }
         bind(checkEdgeScrollUp) { prefs.setGlobalEdgeScrollUp(it) }
         bind(checkEdgeScrollDown) { prefs.setGlobalEdgeScrollDown(it) }
@@ -1423,7 +1458,20 @@ If you’re using something else, look for a “Superuser / SU” permission lis
         bind(checkEdgeScrollRight) { prefs.setGlobalEdgeScrollRight(it) }
         bind(checkEdgeScrollInMouse) { prefs.setGlobalEdgeScrollInMouse(it) }
         bind(checkEdgeScrollInKeyboard) { prefs.setGlobalEdgeScrollInKeyboard(it) }
-        bind(checkPadDoubleTapToggle) { prefs.setGlobalPadDoubleTapToggleEnabled(it) }
+        bind(checkPadGestures) {
+            prefs.setGlobalPadGesturesEnabled(it)
+            updatePadGesturesEnabledState()
+            checkPadGestures.postDelayed({ updateExperimentalStatus() }, 1500)
+        }
+        updatePadGesturesEnabledState()
+        spinnerPadDoubleTap.setOnItemSelectedListenerSimple { position ->
+            if (suppressUiListeners) return@setOnItemSelectedListenerSimple
+            prefs.setGlobalPadDoubleTapAction(padTapOptions[position])
+        }
+        spinnerPadTripleTap.setOnItemSelectedListenerSimple { position ->
+            if (suppressUiListeners) return@setOnItemSelectedListenerSimple
+            prefs.setGlobalPadTripleTapAction(padTapOptions[position])
+        }
 
         spinnerEdgeScrollSpeed.setOnItemSelectedListenerSimple { position ->
             if (suppressUiListeners) return@setOnItemSelectedListenerSimple

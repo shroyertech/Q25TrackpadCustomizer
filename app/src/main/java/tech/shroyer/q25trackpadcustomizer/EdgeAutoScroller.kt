@@ -100,9 +100,26 @@ class EdgeAutoScroller(
      */
     fun updateMouseObservation() {
         val g = prefs.getGlobalEdgeScrollSettings()
-        val want = Build.VERSION.SDK_INT >= 35 && g.inMouseMode && prefs.isEdgeScrollUsedAnywhere()
+        val usedAnywhere = prefs.isEdgeScrollUsedAnywhere()
+        val want = Build.VERSION.SDK_INT >= 35 && g.inMouseMode && usedAnywhere
+        android.util.Log.i(
+            TAG,
+            "updateMouseObservation sdk=${Build.VERSION.SDK_INT} inMouse=${g.inMouseMode} used=$usedAnywhere want=$want observing=$observingMouse"
+        )
+        if (!want) setStatus(
+            when {
+                Build.VERSION.SDK_INT < 35 -> "Mouse mode edge scroll needs Android 15+"
+                !usedAnywhere -> "Edge scroll is off"
+                else -> "Mouse mode edge scroll is off"
+            }
+        )
         if (want == observingMouse) return
-        val info = service.serviceInfo ?: return
+        val info = service.serviceInfo
+        if (info == null) {
+            android.util.Log.w(TAG, "serviceInfo is null")
+            setStatus("Mouse feed: service not ready")
+            return
+        }
         try {
             if (want) {
                 info.motionEventSources = InputDevice.SOURCE_MOUSE
@@ -120,9 +137,15 @@ class EdgeAutoScroller(
             }
             service.serviceInfo = info
             observingMouse = want
-            android.util.Log.d(TAG, "mouse observation ${if (want) "on" else "off"}")
+            val after = service.serviceInfo
+            android.util.Log.i(
+                TAG,
+                "mouse observation ${if (want) "on" else "off"}; sources now=${after?.motionEventSources}"
+            )
+            if (want) setStatus("Mouse feed requested, waiting for cursor movement")
         } catch (t: Throwable) {
             android.util.Log.w(TAG, "mouse observation failed: $t")
+            setStatus("Mouse feed failed: ${t.javaClass.simpleName}")
             // Not supported on this build: leave mouse events alone.
             if (want) {
                 try {
@@ -155,7 +178,20 @@ class EdgeAutoScroller(
     private var lastMouseX = Float.NaN
     private var lastMouseY = Float.NaN
 
+    private var mouseEventsSeen = 0L
+    private var lastSeenLogUptime = 0L
+
     fun onMouseEvent(event: MotionEvent) {
+        mouseEventsSeen++
+        val nowSeen = SystemClock.uptimeMillis()
+        if (mouseEventsSeen == 1L || nowSeen - lastSeenLogUptime > 3000L) {
+            lastSeenLogUptime = nowSeen
+            android.util.Log.i(
+                TAG,
+                "mouse events seen=$mouseEventsSeen action=${event.actionMasked} src=${event.source} mode=${AppState.currentMode}"
+            )
+            setStatus("Mouse feed working ($mouseEventsSeen events), mode=${AppState.currentMode}")
+        }
         val action = event.actionMasked
         if (action != MotionEvent.ACTION_HOVER_MOVE && action != MotionEvent.ACTION_MOVE) return
         if (AppState.currentMode != Mode.MOUSE) return
@@ -230,6 +266,10 @@ class EdgeAutoScroller(
 
     private var lastLogUptime = 0L
 
+    private fun setStatus(text: String) {
+        AppState.edgeScrollStatus = text
+    }
+
     private fun logThrottled(
         x: Float, y: Float, rx: Float, ry: Float, rel: Boolean,
         screen: Rect, win: Rect, pushX: Float, pushY: Float
@@ -238,7 +278,7 @@ class EdgeAutoScroller(
         if (pushX == 0f && pushY == 0f && now - lastLogUptime < 1000L) return
         if ((pushX != 0f || pushY != 0f) && now - lastLogUptime < 150L) return
         lastLogUptime = now
-        android.util.Log.d(
+        android.util.Log.i(
             TAG,
             "mouse x=$x y=$y rel=($rx,$ry) hasRel=$rel screen=$screen win=$win push=($pushX,$pushY) wheel=${wheel.isReady}"
         )

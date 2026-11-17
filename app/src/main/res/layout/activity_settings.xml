@@ -652,18 +652,59 @@
             android:textColor="?android:attr/textColorSecondary"
             android:layout_marginBottom="8dp" />
 
-        <CheckBox
-            android:id="@+id/checkPadDoubleTapToggle"
+        <TextView
+            android:id="@+id/tvEdgeScrollStatus"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Double-tap the trackpad to Quick Toggle (experimental)"
+            android:text=""
+            android:textSize="11sp"
+            android:textStyle="italic"
+            android:textColor="?android:attr/textColorSecondary"
+            android:layout_marginBottom="8dp" />
+
+        <CheckBox
+            android:id="@+id/checkPadGestures"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Trackpad tap gestures (experimental): double and triple tap the pad surface"
             android:textSize="12sp" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Tap the pad surface twice (not the click). Cycles modes like the Quick Toggle shortcut, which still works for key mapper apps. Needs root. Each app can override this."
+            android:text="Double tap action"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/spinnerPadDoubleTap"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Triple tap action"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/spinnerPadTripleTap"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Tap the pad surface (not the click). Works in Mouse mode only: in Keyboard and Scroll modes the pad sends nothing for a tap. Needs root. The Quick Toggle shortcut still works for key mapper apps. Every gesture is also broadcast as tech.shroyer.q25trackpadcustomizer.PAD_TAP (extra: taps = 2 or 3) for Tasker/MacroDroid, and the F9-F12 actions can be used as Key Mapper triggers. Each app can override these."
             android:textSize="11sp"
+            android:textColor="?android:attr/textColorSecondary" />
+
+        <TextView
+            android:id="@+id/tvPadTapStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textSize="11sp"
+            android:textStyle="italic"
             android:textColor="?android:attr/textColorSecondary"
             android:layout_marginBottom="8dp" />
 

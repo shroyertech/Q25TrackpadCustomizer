@@ -29,6 +29,9 @@ import kotlin.math.pow
  *                       add v / h wheel notches at screen point (x, y);
  *                       ease (0..1) = share of the queue released per 60 Hz frame;
  *                       inertia 0..3 = glide after the input stops (0 = none)
+ *   t <0|1>             trackpad tap detection off/on; prints "tap <n>" for n >= 2 taps
+ *   k <n>               click at the cursor: n = 1..3 left clicks, 0 = right click
+ *   e <keycode>         inject a key press (down + up) from a virtual keyboard
  *   q                   quit
  * Prints "ready" once injection is available, or "error <reason>" and exits.
  *
@@ -167,6 +170,16 @@ object WheelInjectorMain {
 
         startPump(injector)
 
+        val out = Object()
+        val pad = PadTapDetector { n ->
+            synchronized(out) {
+                println("tap $n")
+                System.out.flush()
+            }
+        }
+        var padStarted = false
+        val clicker = java.util.concurrent.Executors.newSingleThreadExecutor()
+
         val reader = BufferedReader(InputStreamReader(System.`in`))
         while (true) {
             val line = try {
@@ -178,6 +191,31 @@ object WheelInjectorMain {
             val parts = line.trim().split(' ')
             when (parts.firstOrNull()) {
                 "q" -> break
+                "t" -> {
+                    val on = parts.getOrNull(1) == "1"
+                    if (on && !padStarted) {
+                        padStarted = true
+                        val devs = pad.start()
+                        synchronized(out) {
+                            println("pad $devs")
+                            System.out.flush()
+                        }
+                    }
+                    pad.enabled = on
+                }
+                "e" -> {
+                    val code = parts.getOrNull(1)?.toIntOrNull()
+                    if (code != null) clicker.execute {
+                        try {
+                            injector.key(code)
+                        } catch (_: Throwable) {
+                        }
+                    }
+                }
+                "k" -> {
+                    val n = parts.getOrNull(1)?.toIntOrNull()?.coerceIn(0, 3) ?: 1
+                    clicker.execute { pad.click(n) }
+                }
                 "c" -> if (parts.size >= 4) {
                     synchronized(lock) {
                         vAxis.pxPerNotch = parts[1].toFloatOrNull()?.coerceAtLeast(0f) ?: 0f
@@ -344,6 +382,17 @@ object WheelInjectorMain {
 
     /** Finds a working injectInputEvent across Android versions (all hidden APIs). */
     private class Injector(private val target: Any, private val method: Method) {
+
+        fun key(code: Int) {
+            val now = SystemClock.uptimeMillis()
+            for (action in intArrayOf(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.ACTION_UP)) {
+                val ev = android.view.KeyEvent(
+                    now, SystemClock.uptimeMillis(), action, code, 0, 0,
+                    android.view.KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, InputDevice.SOURCE_KEYBOARD
+                )
+                method.invoke(target, ev, 0)
+            }
+        }
 
         fun scroll(px: Float, py: Float, v: Float, h: Float) {
             val now = SystemClock.uptimeMillis()
