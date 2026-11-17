@@ -27,6 +27,19 @@ import kotlin.math.abs
  */
 class PadTapDetector(private val onTaps: (Int) -> Unit) {
 
+    /** Burst limits for one motion source. */
+    private class Limits(
+        val burstGap: Long,
+        val tapMaxMs: Long,
+        val tapMaxReports: Int,
+        val tapMaxTravel: Int,
+        val tapMaxStep: Int,
+        val tapMinGap: Long,
+        val tapMaxGap: Long,
+        val quietBefore: Long,
+        val sequenceEnd: Long
+    )
+
     @Volatile
     var enabled = false
 
@@ -48,6 +61,19 @@ class PadTapDetector(private val onTaps: (Int) -> Unit) {
     private var tapCount = 0
     private var lastTapEnd = 0L
 
+    private var burstMaxStep = 0
+    private var burstLimits = REL_LIMITS
+
+    // Keyboard / Scroll modes: the kernel driver (bbqX0kbd) logs every raw trackpad report
+    // to the kernel log, taps included, while the input device only gets arrow keys. When
+    // the hardware is in keyboard mode, taps are recognised from those log lines instead.
+    @Volatile
+    private var kmsgWorking = false
+    @Volatile
+    private var hwKeyboard = false
+    private var hwModeCheckedUptime = 0L
+    private var kmsgOffsetMs = Long.MAX_VALUE
+
     // Current evdev frame (between SYN_REPORTs)
     private var frameTapScan = false
     private var frameHasKey = false
@@ -64,7 +90,55 @@ class PadTapDetector(private val onTaps: (Int) -> Unit) {
             Thread({ readLoop(dev) }, "pad-read-${File(dev).name}").apply { isDaemon = true; start() }
         }
         Thread({ checkLoop() }, "pad-tap-check").apply { isDaemon = true; start() }
-        return found.joinToString(",")
+        Thread({ kmsgLoop() }, "pad-kmsg").apply { isDaemon = true; start() }
+        return found.joinToString(",") + ",kmsg"
+    }
+
+    /** Hardware mode from the driver's proc switch (0 = mouse, 1 = keyboard), cached briefly. */
+    private fun hardwareIsKeyboard(): Boolean {
+        val now = SystemClock.uptimeMillis()
+        if (now - hwModeCheckedUptime < HW_MODE_CACHE_MS) return hwKeyboard
+        hwModeCheckedUptime = now
+        hwKeyboard = try {
+            File(PROC_SWITCH).readText().trim() == "1"
+        } catch (_: Exception) {
+            false
+        }
+        return hwKeyboard
+    }
+
+    private fun kmsgLoop() {
+        val regex = Regex("X Reg: (-?\\d+) Y Reg: (-?\\d+)")
+        try {
+            FileInputStream("/dev/kmsg").use { input ->
+                val buf = ByteArray(8192)
+                val startUs = System.nanoTime() / 1000 - KMSG_SKIP_OLDER_US
+                while (true) {
+                    val n = input.read(buf)   // one record per read
+                    if (n <= 0) break
+                    val rec = String(buf, 0, n)
+                    if (!rec.contains("X Reg:")) continue
+                    val semi = rec.indexOf(';')
+                    if (semi < 0) continue
+                    val usec = rec.substring(0, semi).split(',').getOrNull(2)?.toLongOrNull() ?: continue
+                    if (usec < startUs) continue // backlog from before we started
+                    kmsgWorking = true
+                    if (!enabled) continue
+                    val m = regex.find(rec, semi) ?: continue
+                    val x = m.groupValues[1].toIntOrNull() ?: continue
+                    val y = m.groupValues[2].toIntOrNull() ?: continue
+                    // Map kernel time to uptime; the smallest offset seen has the least read lag.
+                    val kMs = usec / 1000
+                    val off = SystemClock.uptimeMillis() - kMs
+                    if (off < kmsgOffsetMs) kmsgOffsetMs = off
+                    if (!hardwareIsKeyboard()) continue // Mouse mode: evdev motion is used
+                    report(abs(x) + abs(y), maxOf(abs(x), abs(y)), kMs + kmsgOffsetMs, KMSG_LIMITS)
+                }
+            }
+        } catch (t: Throwable) {
+            System.err.println("kmsg: $t")
+        }
+        kmsgWorking = false
     }
 
     /** Devices that can report relative X/Y motion (the trackpad, incl. virtual copies). */
@@ -119,17 +193,24 @@ class PadTapDetector(private val onTaps: (Int) -> Unit) {
             }
             EV_MSC -> if (code == MSC_SCAN && value == TAP_SCAN_CODE) frameTapScan = true
             EV_SYN -> {
-                if (frameTapScan && !frameHasKey) markerTap()
+                // The firmware's tap marker is only used when the kernel log isn't readable.
+                if (frameTapScan && !frameHasKey && !kmsgWorking) markerTap()
                 frameTapScan = false
                 frameHasKey = false
                 if (pendingDx != 0 || pendingDy != 0) {
-                    report(abs(pendingDx) + abs(pendingDy))
+                    report(
+                        abs(pendingDx) + abs(pendingDy), maxOf(abs(pendingDx), abs(pendingDy)),
+                        SystemClock.uptimeMillis(), REL_LIMITS
+                    )
                     pendingDx = 0
                     pendingDy = 0
                 }
             }
             EV_KEY -> {
                 frameHasKey = true
+                // In keyboard mode tap jitter sometimes leaks out as a stray arrow key; slides
+                // are recognised from their motion instead, so arrows don't cancel a sequence.
+                if (kmsgWorking && code in ARROW_KEYS) return
                 synchronized(lock) {
                     // A real click, key or slide cancels any tap sequence.
                     tapCount = 0
@@ -144,26 +225,29 @@ class PadTapDetector(private val onTaps: (Int) -> Unit) {
         val now = SystemClock.uptimeMillis()
         synchronized(lock) {
             burstOpen = false
-            tapCount = if (tapCount > 0 && now - lastTapEnd <= TAP_MAX_GAP_MS) tapCount + 1 else 1
+            tapCount = if (tapCount > 0 && now - lastTapEnd <= REL_LIMITS.tapMaxGap) tapCount + 1 else 1
+            burstLimits = REL_LIMITS
             lastTapEnd = now
             lock.notifyAll()
         }
     }
 
-    private fun report(magnitude: Int) {
-        val now = SystemClock.uptimeMillis()
+    private fun report(magnitude: Int, step: Int, now: Long, limits: Limits) {
         synchronized(lock) {
-            if (burstOpen && now - burstLast > BURST_GAP_MS) finishBurst()
+            if (burstOpen && (limits !== burstLimits || now - burstLast > burstLimits.burstGap)) finishBurst()
             if (!burstOpen) {
                 burstOpen = true
+                burstLimits = limits
                 burstStart = now
                 burstReports = 0
                 burstAbs = 0
+                burstMaxStep = 0
                 quietBefore = if (lastReportUptime == 0L) Long.MAX_VALUE else now - lastReportUptime
             }
             burstLast = now
             burstReports++
             burstAbs += magnitude
+            if (step > burstMaxStep) burstMaxStep = step
             lastReportUptime = now
             lock.notifyAll()
         }
@@ -172,16 +256,18 @@ class PadTapDetector(private val onTaps: (Int) -> Unit) {
     // Caller holds lock.
     private fun finishBurst() {
         burstOpen = false
+        val l = burstLimits
         val duration = burstLast - burstStart
-        val isTap = duration <= TAP_MAX_MS && burstReports <= TAP_MAX_REPORTS && burstAbs <= TAP_MAX_TRAVEL
+        val isTap = duration <= l.tapMaxMs && burstReports <= l.tapMaxReports &&
+                burstAbs <= l.tapMaxTravel && burstMaxStep <= l.tapMaxStep
         if (!isTap) {
             tapCount = 0
             return
         }
         val sinceLastTap = burstStart - lastTapEnd
         tapCount = when {
-            tapCount > 0 && sinceLastTap in TAP_MIN_GAP_MS..TAP_MAX_GAP_MS -> tapCount + 1
-            quietBefore >= QUIET_BEFORE_MS -> 1
+            tapCount > 0 && sinceLastTap in l.tapMinGap..l.tapMaxGap -> tapCount + 1
+            quietBefore >= l.quietBefore -> 1
             else -> 0
         }
         lastTapEnd = burstLast
@@ -193,8 +279,8 @@ class PadTapDetector(private val onTaps: (Int) -> Unit) {
             synchronized(lock) {
                 while (!burstOpen && tapCount == 0) lock.wait()
                 val now = SystemClock.uptimeMillis()
-                if (burstOpen && now - burstLast > BURST_GAP_MS) finishBurst()
-                if (!burstOpen && tapCount > 0 && now - lastTapEnd > SEQUENCE_END_MS) {
+                if (burstOpen && now - burstLast > burstLimits.burstGap) finishBurst()
+                if (!burstOpen && tapCount > 0 && now - lastTapEnd > burstLimits.sequenceEnd) {
                     fire = tapCount
                     tapCount = 0
                 }
@@ -252,14 +338,25 @@ class PadTapDetector(private val onTaps: (Int) -> Unit) {
         private const val BTN_LEFT = 0x110
         private const val BTN_RIGHT = 0x111
 
-        private const val BURST_GAP_MS = 35L
-        private const val TAP_MAX_MS = 90L
-        private const val TAP_MAX_REPORTS = 9
-        private const val TAP_MAX_TRAVEL = 40
-        private const val TAP_MIN_GAP_MS = 50L
-        private const val TAP_MAX_GAP_MS = 330L
-        private const val QUIET_BEFORE_MS = 200L
-        private const val SEQUENCE_END_MS = 340L
+        private val ARROW_KEYS = setOf(103, 105, 106, 108)
+        private const val PROC_SWITCH = "/proc/q20_switch_key_mouse"
+        private const val HW_MODE_CACHE_MS = 400L
+        private const val KMSG_SKIP_OLDER_US = 2_000_000L
+
+        // Mouse mode, evdev REL reports (~7.5 ms apart).
+        private val REL_LIMITS = Limits(
+            burstGap = 35L, tapMaxMs = 90L, tapMaxReports = 9, tapMaxTravel = 40, tapMaxStep = Int.MAX_VALUE,
+            tapMinGap = 50L, tapMaxGap = 330L, quietBefore = 200L, sequenceEnd = 340L
+        )
+
+        // Keyboard mode, raw driver reports from the kernel log (X/Y Reg deltas, ~7-8 ms
+        // apart). Measured 2026-11-17: one tap = 1-7 reports, often split into 2-3 mini
+        // bursts 38-61 ms apart, sum |x|+|y| usually < 25 (max ~60), largest step <= 11.
+        // Slides = 8-20 reports per burst, 55-200 travel, steps 10-22, bursts ~0.3 s apart.
+        private val KMSG_LIMITS = Limits(
+            burstGap = 80L, tapMaxMs = 130L, tapMaxReports = 9, tapMaxTravel = 60, tapMaxStep = 12,
+            tapMinGap = 60L, tapMaxGap = 330L, quietBefore = 200L, sequenceEnd = 380L
+        )
         private const val CHECK_MS = 20L
         private const val CLICK_HOLD_MS = 25L
         private const val CLICK_GAP_MS = 60L

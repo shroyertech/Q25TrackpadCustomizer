@@ -467,6 +467,11 @@ class EdgeAutoScroller(
                 (focused == null || (!focusEventSinceKey && before != null && before == now))
         val atEdge = focused != null && isNearEdge(now, r, keyDx, keyDy)
 
+        android.util.Log.i(
+            TAG,
+            "key dx=$keyDx dy=$keyDy focus=${focused != null} before=$before now=$now win=$r " +
+                    "focusEvt=$focusEventSinceKey scrolled=$scrolledSinceKey stuck=$stuck atEdge=$atEdge wheel=${wheel.isReady}"
+        )
         if (!stuck && !atEdge) return
 
         val notches = speedFor(s).wheelNotches
