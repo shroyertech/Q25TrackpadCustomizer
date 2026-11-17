@@ -151,6 +151,7 @@ class AppSwitchService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        instance = this
         imePackages = loadImePackages()
         registerImeObserver()
 
@@ -168,6 +169,8 @@ class AppSwitchService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        if (instance === this) instance = null
+        ToastHelper.dismissOverlay()
         try {
             prefs.unregisterListener(prefListener)
         } catch (_: Exception) {
@@ -517,6 +520,9 @@ class AppSwitchService : AccessibilityService() {
         onSuccess: (() -> Unit)? = null,
         onFailure: (() -> Unit)? = null
     ) {
+        if (AppState.currentMode != target) {
+            android.util.Log.i("Q25Mode", "applyMode ${AppState.currentMode} -> $target fg=${AppState.currentForegroundPackage}")
+        }
         AppState.currentMode = target
         if (target == Mode.SCROLL_WHEEL) {
             // Get the wheel helper running before the first scroll tick.
@@ -1212,11 +1218,13 @@ class AppSwitchService : AccessibilityService() {
         val settings = prefs.getEffectivePadGestureSettings(fg)
         android.util.Log.i("Q25PadTap", "taps=$taps pkg=$fg enabled=${settings.enabled}")
         if (!settings.enabled) return
+        // Two quick double taps can merge into one 4-tap sequence: run the double tap twice.
         val action = when (taps) {
-            2 -> settings.doubleTap
+            2, 4 -> settings.doubleTap
             3 -> settings.tripleTap
             else -> return
         }
+        val repeats = if (taps == 4) 2 else 1
         AppState.padTapStatus = "Last gesture: $taps taps → ${action.label}"
 
         // Always announce the gesture, so automation apps (Tasker, MacroDroid…) can react.
@@ -1228,6 +1236,10 @@ class AppSwitchService : AccessibilityService() {
         } catch (_: Exception) {
         }
 
+        repeat(repeats) { performPadTapAction(action) }
+    }
+
+    private fun performPadTapAction(action: PadTapAction) {
         when (action) {
             PadTapAction.NONE -> Unit
             PadTapAction.QUICK_TOGGLE -> {
@@ -1495,7 +1507,22 @@ class AppSwitchService : AccessibilityService() {
     private fun handleForegroundAppChanged(packageName: String) {
         if (isIgnoredForegroundPackage(packageName)) return
 
+        // After a manual switch (Quick Toggle, tap gesture) for the app in front, a stray
+        // window event from another package (e.g. a launcher reacting to our overlay
+        // windows) must not undo it: only accept it if that app's window really has focus.
+        val override = AppState.manualOverrideForPackage
+        if (override != null && override != packageName &&
+            override == AppState.currentForegroundPackage
+        ) {
+            val focused = focusedAppPackage()
+            if (focused == override) {
+                android.util.Log.i("Q25Mode", "ignored window event from $packageName; $override still focused")
+                return
+            }
+        }
+
         val prevFg = AppState.currentForegroundPackage
+        if (prevFg != packageName) android.util.Log.i("Q25Mode", "foreground $prevFg -> $packageName")
         AppState.currentForegroundPackage = packageName
         val appChanged = prevFg != null && prevFg != packageName
         if (appChanged) edgeScroller.onWindowsChanged()
@@ -1594,22 +1621,50 @@ class AppSwitchService : AccessibilityService() {
             return
         }
 
-        val root = try {
-            rootInActiveWindow
+        // Prefer the focused app window: the "active" window can be one of our own
+        // overlays or a system window while the cursor hovers over it.
+        val pkg = focusedAppPackage() ?: run {
+            val root = try {
+                rootInActiveWindow
+            } catch (_: Exception) {
+                null
+            } ?: return
+
+            try {
+                root.packageName?.toString()
+            } catch (_: Exception) {
+                null
+            } finally {
+                root.recycle()
+            }
+        }
+
+        if (pkg.isNullOrEmpty() || pkg == AppState.currentForegroundPackage) return
+        android.util.Log.i("Q25Mode", "foreground verify: ${AppState.currentForegroundPackage} -> $pkg")
+        handleForegroundAppChanged(pkg)
+    }
+
+    /** Package of the focused (else active) application window, or null if unknown. */
+    private fun focusedAppPackage(): String? {
+        val list = try {
+            windows
         } catch (_: Exception) {
             null
-        } ?: return
-
-        val pkg = try {
+        } ?: return null
+        val apps = list.filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
+        val w = apps.firstOrNull { it.isFocused } ?: apps.firstOrNull { it.isActive } ?: return null
+        val root = try {
+            w.root
+        } catch (_: Exception) {
+            null
+        } ?: return null
+        return try {
             root.packageName?.toString()
         } catch (_: Exception) {
             null
         } finally {
             root.recycle()
         }
-
-        if (pkg.isNullOrEmpty() || pkg == AppState.currentForegroundPackage) return
-        handleForegroundAppChanged(pkg)
     }
 
     private fun getEffectiveModeForPackage(packageName: String?): Mode {
@@ -1651,6 +1706,11 @@ class AppSwitchService : AccessibilityService() {
     }
 
     companion object {
+        /** The running service, for overlay toasts. Main thread only. */
+        @Volatile
+        var instance: AppSwitchService? = null
+            private set
+
         private const val TEXT_OVERRIDE_CHECK_INTERVAL_MS = 350L
         private const val TEXT_RECENT_MS = 1200L
         private const val CONTENT_CHECK_DELAY_MS = 120L

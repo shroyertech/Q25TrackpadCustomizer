@@ -321,7 +321,7 @@ class EdgeAutoScroller(
         logThrottled(x, y, rx, ry, hadRelative, screen, win, pushX, pushY)
         if (pushX == 0f && pushY == 0f) return
 
-        val gain = mouseGain(s.speed)
+        val gain = mouseGain(speedFor(s))
         // Push down/right reveals content below/right: negative VSCROLL, positive HSCROLL.
         val v = -pushY * gain / pxPerNotchV
         val h = pushX * gain / pxPerNotchH
@@ -336,7 +336,7 @@ class EdgeAutoScroller(
         val py = if (pushY != 0f) win.exactCenterY()
         else y.coerceIn(win.top + inset, win.bottom - inset)
 
-        if (wheel.scroll(px, py, v, h, MOUSE_EASE, 0)) return
+        if (wheel.scroll(px, py, v, h, MOUSE_EASE, inertia())) return
 
         val now = SystemClock.uptimeMillis()
         if (now - lastFallbackUptime < FALLBACK_INTERVAL_MS) return
@@ -469,7 +469,7 @@ class EdgeAutoScroller(
 
         if (!stuck && !atEdge) return
 
-        val notches = s.speed.wheelNotches
+        val notches = speedFor(s).wheelNotches
         val v = -keyDy * notches
         val h = keyDx * notches
         val band = edgeBand(r)
@@ -480,7 +480,7 @@ class EdgeAutoScroller(
 
         // No touch-drag fallback here: injected touches would knock the app out of
         // keyboard-navigation mode. The helper is started on demand; the next press works.
-        wheel.scroll(tx, ty, v, h, KEY_EASE, 0)
+        wheel.scroll(tx, ty, v, h, KEY_EASE, inertia())
     }
 
     private fun isNearEdge(node: Rect, win: Rect, dx: Int, dy: Int): Boolean {
@@ -539,10 +539,17 @@ class EdgeAutoScroller(
         return maxOf(EDGE_BAND_DP * dm.density, minOf(r.width(), r.height()) * 0.02f)
     }
 
+    /** Edge speed: its own override, else the app's scroll wheel sensitivity. */
+    private fun speedFor(s: EdgeScrollSettings): ScrollSensitivity =
+        s.speedOverride ?: prefs.getEffectiveScrollSettings(AppState.currentForegroundPackage).sensitivity
+
+    private fun inertia(): Int = prefs.getScrollInertia().level
+
+    // Scroll pixels per pixel of push past the edge.
     private fun mouseGain(speed: ScrollSensitivity): Float = when (speed) {
-        ScrollSensitivity.SLOW -> 1.2f
-        ScrollSensitivity.MEDIUM -> 2.2f
-        ScrollSensitivity.FAST -> 4.0f
+        ScrollSensitivity.SLOW -> 4f
+        ScrollSensitivity.MEDIUM -> 7f
+        ScrollSensitivity.FAST -> 11f
     }
 
     private fun sign(f: Float): Int = if (f > 0f) 1 else if (f < 0f) -1 else 0

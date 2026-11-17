@@ -680,7 +680,9 @@ class Prefs(context: Context) {
         right = prefs.getBoolean(KEY_EDGE_RIGHT, false),
         inMouseMode = prefs.getBoolean(KEY_EDGE_IN_MOUSE, true),
         inKeyboardMode = prefs.getBoolean(KEY_EDGE_IN_KEYBOARD, true),
-        speed = ScrollSensitivity.fromPrefValue(prefs.getInt(KEY_EDGE_SPEED, ScrollSensitivity.MEDIUM.prefValue))
+        speedOverride = prefs.getInt(KEY_EDGE_SPEED, EDGE_SPEED_MATCH).let { v ->
+            if (v == EDGE_SPEED_MATCH) null else ScrollSensitivity.fromPrefValue(v)
+        }
     )
 
     fun setGlobalEdgeScrollEnabled(v: Boolean) = prefs.edit().putBoolean(KEY_EDGE_ENABLED, v).apply()
@@ -690,7 +692,9 @@ class Prefs(context: Context) {
     fun setGlobalEdgeScrollRight(v: Boolean) = prefs.edit().putBoolean(KEY_EDGE_RIGHT, v).apply()
     fun setGlobalEdgeScrollInMouse(v: Boolean) = prefs.edit().putBoolean(KEY_EDGE_IN_MOUSE, v).apply()
     fun setGlobalEdgeScrollInKeyboard(v: Boolean) = prefs.edit().putBoolean(KEY_EDGE_IN_KEYBOARD, v).apply()
-    fun setGlobalEdgeScrollSpeed(v: ScrollSensitivity) = prefs.edit().putInt(KEY_EDGE_SPEED, v.prefValue).apply()
+    /** null = match the scroll wheel sensitivity (default). */
+    fun setGlobalEdgeScrollSpeed(v: ScrollSensitivity?) =
+        prefs.edit().putInt(KEY_EDGE_SPEED, v?.prefValue ?: EDGE_SPEED_MATCH).apply()
 
     private fun appBool(key: String, global: Boolean): Boolean =
         if (prefs.contains(key)) prefs.getBoolean(key, global) else global
@@ -909,7 +913,8 @@ class Prefs(context: Context) {
         private const val KEY_EDGE_RIGHT = "edge_scroll_right"
         private const val KEY_EDGE_IN_MOUSE = "edge_scroll_in_mouse"
         private const val KEY_EDGE_IN_KEYBOARD = "edge_scroll_in_keyboard"
-        private const val KEY_EDGE_SPEED = "edge_scroll_speed"
+        private const val KEY_EDGE_SPEED = "edge_scroll_speed2"
+        private const val EDGE_SPEED_MATCH = -1
         private fun keyEdgeApp(name: String, pkg: String) = "edge_scroll_app_${name}_$pkg"
         const val EDGE_KEY_PREFIX = "edge_scroll_"
 

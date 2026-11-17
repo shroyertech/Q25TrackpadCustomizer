@@ -12,7 +12,8 @@ data class EdgeScrollSettings(
     val right: Boolean,
     val inMouseMode: Boolean,
     val inKeyboardMode: Boolean,
-    val speed: ScrollSensitivity
+    /** Explicit speed, or null to match the app's scroll wheel sensitivity. */
+    val speedOverride: ScrollSensitivity?
 ) {
     fun allows(dx: Int, dy: Int): Boolean = when {
         dy < 0 -> up

@@ -1384,7 +1384,7 @@ If you’re using something else, look for a “Superuser / SU” permission lis
         checkEdgeScrollRight.isChecked = e.right
         checkEdgeScrollInMouse.isChecked = e.inMouseMode
         checkEdgeScrollInKeyboard.isChecked = e.inKeyboardMode
-        val speedIdx = scrollSensOptions.indexOf(e.speed).coerceAtLeast(0)
+        val speedIdx = e.speedOverride?.let { scrollSensOptions.indexOf(it) + 1 } ?: 0
         if (spinnerEdgeScrollSpeed.adapter != null && spinnerEdgeScrollSpeed.selectedItemPosition != speedIdx) {
             spinnerEdgeScrollSpeed.setSelection(speedIdx, false)
         }
@@ -1430,7 +1430,10 @@ If you’re using something else, look for a “Superuser / SU” permission lis
             sp.adapter = a
         }
 
-        val speedAdapter = ArrayAdapter(this, AndroidR.layout.simple_spinner_item, scrollSensLabels)
+        val speedAdapter = ArrayAdapter(
+            this, AndroidR.layout.simple_spinner_item,
+            listOf("Match scroll wheel settings") + scrollSensLabels
+        )
         speedAdapter.setDropDownViewResource(AndroidR.layout.simple_spinner_dropdown_item)
         spinnerEdgeScrollSpeed.adapter = speedAdapter
 
@@ -1475,7 +1478,7 @@ If you’re using something else, look for a “Superuser / SU” permission lis
 
         spinnerEdgeScrollSpeed.setOnItemSelectedListenerSimple { position ->
             if (suppressUiListeners) return@setOnItemSelectedListenerSimple
-            prefs.setGlobalEdgeScrollSpeed(scrollSensOptions[position])
+            prefs.setGlobalEdgeScrollSpeed(if (position == 0) null else scrollSensOptions[position - 1])
         }
     }
 

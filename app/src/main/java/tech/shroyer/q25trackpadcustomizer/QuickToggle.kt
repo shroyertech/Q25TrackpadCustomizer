@@ -39,6 +39,7 @@ object QuickToggle {
         // (invisible) activity never blocks on root. Explicit user action: retry root now even
         // if a previous attempt failed recently.
         val previousMode = AppState.currentMode
+        android.util.Log.i("Q25Mode", "quickToggle $currentLogical -> $nextMode fg=$targetPackage")
         AppState.currentMode = nextMode
         prefs.setLastKnownMode(nextMode)
 
