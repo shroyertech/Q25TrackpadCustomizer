@@ -347,7 +347,7 @@
             android:id="@+id/checkAppPadGestures"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Trackpad tap gestures (Mouse mode)"
+            android:text="Trackpad tap gestures"
             android:textSize="12sp" />
 
         <TextView

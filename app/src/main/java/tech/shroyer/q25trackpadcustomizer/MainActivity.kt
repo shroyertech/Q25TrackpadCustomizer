@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.text.Editable
@@ -105,6 +106,17 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         prefs = Prefs(this)
+
+        // Toasts from the background service (mode switches, Quick Toggle) are dropped by
+        // Android while the app's notifications are off, so ask once on Android 13+.
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission("android.permission.POST_NOTIFICATIONS") != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            try {
+                requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 1001)
+            } catch (_: Exception) {
+            }
+        }
 
         spinnerSystemDefault = findViewById(R.id.spinnerSystemDefault)
         spinnerSetAllMode = findViewById(R.id.spinnerSetAllMode)

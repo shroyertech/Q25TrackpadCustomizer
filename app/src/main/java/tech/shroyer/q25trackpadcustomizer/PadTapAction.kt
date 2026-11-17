@@ -2,7 +2,7 @@ package tech.shroyer.q25trackpadcustomizer
 
 import android.view.KeyEvent
 
-/** What a double or triple tap on the trackpad does (experimental, Mouse mode only). */
+/** What a double or triple tap on the trackpad does (experimental). */
 enum class PadTapAction(val prefValue: Int, val label: String, val keyCode: Int = 0) {
     NONE(0, "Do nothing"),
     QUICK_TOGGLE(1, "Quick Toggle (switch mode)"),

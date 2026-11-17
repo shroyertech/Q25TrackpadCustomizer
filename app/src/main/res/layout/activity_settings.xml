@@ -694,7 +694,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Tap the pad surface (not the click). Works in Mouse mode only: in Keyboard and Scroll modes the pad sends nothing for a tap. Needs root. The Quick Toggle shortcut still works for key mapper apps. Every gesture is also broadcast as tech.shroyer.q25trackpadcustomizer.PAD_TAP (extra: taps = 2 or 3) for Tasker/MacroDroid, and the F9-F12 actions can be used as Key Mapper triggers. Each app can override these."
+            android:text="Tap the pad surface (not the click). Works in every mode; most reliable in Keyboard and Scroll modes, where the pad reports taps directly (in Mouse mode they are guessed from tiny movements). Needs root. The Quick Toggle shortcut still works for key mapper apps. Every gesture is also broadcast as tech.shroyer.q25trackpadcustomizer.PAD_TAP (extra: taps = 2 or 3) for Tasker/MacroDroid, and the F9-F12 actions can be used as Key Mapper triggers. Each app can override these."
             android:textSize="11sp"
             android:textColor="?android:attr/textColorSecondary" />
 

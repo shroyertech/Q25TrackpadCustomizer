@@ -12,8 +12,10 @@ import kotlin.math.abs
  * Runs inside the root helper ([WheelInjectorMain]). Reads the trackpad's raw evdev
  * events (no grab: the system still gets every event) and recognises taps.
  *
- * The Q25 pad is an optical sensor: it reports motion only, never touch down/up, and
- * only in Mouse mode (Keyboard mode emits nothing until the finger slides ~26 counts).
+ * Keyboard and Scroll modes: the firmware marks a tap with a bare MSC_SCAN 0x07 (no key
+ * in the same frame); slides send arrow keys. Those taps are exact.
+ *
+ * Mouse mode: no tap marker at all, the pad only reports motion.
  * Measured on the device (2026-11-17): a tap is a burst of 1-8 motion reports ~7.5 ms
  * apart, lasting <= 80 ms, moving 0-30 counts; taps in a double/triple tap start
  * 120-240 ms apart; separate gestures are >= 0.7 s apart. Cursor movement is longer
@@ -45,6 +47,10 @@ class PadTapDetector(private val onTaps: (Int) -> Unit) {
     // Tap sequence
     private var tapCount = 0
     private var lastTapEnd = 0L
+
+    // Current evdev frame (between SYN_REPORTs)
+    private var frameTapScan = false
+    private var frameHasKey = false
 
     @Volatile
     private var lastDevice: String? = null
@@ -111,16 +117,36 @@ class PadTapDetector(private val onTaps: (Int) -> Unit) {
                 else if (code == REL_Y) pendingDy += value
                 lastDevice = dev
             }
-            EV_SYN -> if (pendingDx != 0 || pendingDy != 0) {
-                report(abs(pendingDx) + abs(pendingDy))
-                pendingDx = 0
-                pendingDy = 0
+            EV_MSC -> if (code == MSC_SCAN && value == TAP_SCAN_CODE) frameTapScan = true
+            EV_SYN -> {
+                if (frameTapScan && !frameHasKey) markerTap()
+                frameTapScan = false
+                frameHasKey = false
+                if (pendingDx != 0 || pendingDy != 0) {
+                    report(abs(pendingDx) + abs(pendingDy))
+                    pendingDx = 0
+                    pendingDy = 0
+                }
             }
-            EV_KEY -> synchronized(lock) {
-                // A real click or key cancels any tap sequence.
-                tapCount = 0
-                burstOpen = false
+            EV_KEY -> {
+                frameHasKey = true
+                synchronized(lock) {
+                    // A real click, key or slide cancels any tap sequence.
+                    tapCount = 0
+                    burstOpen = false
+                }
             }
+        }
+    }
+
+    /** Exact tap reported by the firmware (Keyboard / Scroll modes). */
+    private fun markerTap() {
+        val now = SystemClock.uptimeMillis()
+        synchronized(lock) {
+            burstOpen = false
+            tapCount = if (tapCount > 0 && now - lastTapEnd <= TAP_MAX_GAP_MS) tapCount + 1 else 1
+            lastTapEnd = now
+            lock.notifyAll()
         }
     }
 
@@ -218,6 +244,9 @@ class PadTapDetector(private val onTaps: (Int) -> Unit) {
         private const val EV_SYN = 0
         private const val EV_KEY = 1
         private const val EV_REL = 2
+        private const val EV_MSC = 4
+        private const val MSC_SCAN = 4
+        private const val TAP_SCAN_CODE = 7
         private const val REL_X = 0
         private const val REL_Y = 1
         private const val BTN_LEFT = 0x110
@@ -228,9 +257,9 @@ class PadTapDetector(private val onTaps: (Int) -> Unit) {
         private const val TAP_MAX_REPORTS = 9
         private const val TAP_MAX_TRAVEL = 40
         private const val TAP_MIN_GAP_MS = 50L
-        private const val TAP_MAX_GAP_MS = 350L
-        private const val QUIET_BEFORE_MS = 300L
-        private const val SEQUENCE_END_MS = 330L
+        private const val TAP_MAX_GAP_MS = 330L
+        private const val QUIET_BEFORE_MS = 200L
+        private const val SEQUENCE_END_MS = 340L
         private const val CHECK_MS = 20L
         private const val CLICK_HOLD_MS = 25L
         private const val CLICK_GAP_MS = 60L

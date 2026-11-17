@@ -1197,7 +1197,7 @@ class AppSwitchService : AccessibilityService() {
             line.startsWith("pad ") -> {
                 val devs = line.removePrefix("pad ").trim()
                 AppState.padTapStatus = if (devs == "no-device") "No trackpad input device found"
-                else "Listening for taps (Mouse mode) on $devs"
+                else "Listening for taps on $devs"
                 android.util.Log.i("Q25PadTap", "helper: $line")
             }
             line.startsWith("tap ") -> {
