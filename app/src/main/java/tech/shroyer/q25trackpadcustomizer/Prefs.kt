@@ -50,6 +50,25 @@ class Prefs(context: Context) {
         prefs.edit().putInt(keyAppMode(packageName), mode.prefValue).apply()
     }
 
+    /** Set the same mode for many apps in a single write. */
+    fun setAppModes(packageNames: Collection<String>, mode: Mode) {
+        if (packageNames.isEmpty()) return
+        val editor = prefs.edit()
+        for (pkg in packageNames) editor.putInt(keyAppMode(pkg), mode.prefValue)
+        editor.apply()
+    }
+
+    // ---- Cursor speed + mode notification ----
+
+    /** Android pointer speed, -7..7 (0 = system default). */
+    fun getCursorSpeed(): Int = prefs.getInt(KEY_CURSOR_SPEED, 0)
+
+    fun setCursorSpeed(v: Int) = prefs.edit().putInt(KEY_CURSOR_SPEED, v.coerceIn(-7, 7)).apply()
+
+    fun isModeNotificationEnabled(): Boolean = prefs.getBoolean(KEY_MODE_NOTIFICATION, false)
+
+    fun setModeNotificationEnabled(v: Boolean) = prefs.edit().putBoolean(KEY_MODE_NOTIFICATION, v).apply()
+
     // ---- Toast settings ----
 
     fun isToastQuickToggleEnabled(): Boolean = prefs.getBoolean(KEY_TOAST_QUICK_TOGGLE, true)
@@ -486,6 +505,16 @@ class Prefs(context: Context) {
         }
     }
 
+    /**
+     * Allocation-free exclusion check for hot paths (accessibility events).
+     * Does not copy the stored set like [getExcludedPackages] does.
+     */
+    fun isExcluded(packageName: String?): Boolean {
+        if (packageName.isNullOrEmpty()) return false
+        val stored = prefs.getStringSet(KEY_EXCLUDED_PACKAGES, null)
+        return stored?.contains(packageName) ?: DEFAULT_EXCLUDED_PACKAGES.contains(packageName)
+    }
+
     fun addExcludedPackage(packageName: String) {
         val set = HashSet(getExcludedPackages())
         if (set.add(packageName)) {
@@ -512,12 +541,47 @@ class Prefs(context: Context) {
         val horizontal = prefs.getBoolean(KEY_SCROLL_GLOBAL_HORIZONTAL, false)
         val invertV = prefs.getBoolean(KEY_SCROLL_GLOBAL_INV_V, false)
         val invertH = prefs.getBoolean(KEY_SCROLL_GLOBAL_INV_H, false)
+        val method = ScrollMethod.fromPrefValue(prefs.getInt(KEY_SCROLL_GLOBAL_METHOD, ScrollMethod.CLASSIC.prefValue))
         return ScrollSettings(
             sensitivity = sens,
             horizontalEnabled = horizontal,
             invertVertical = invertV,
-            invertHorizontal = invertH
+            invertHorizontal = invertH,
+            method = method
         )
+    }
+
+    fun setGlobalScrollMethod(method: ScrollMethod) {
+        prefs.edit().putInt(KEY_SCROLL_GLOBAL_METHOD, method.prefValue).apply()
+    }
+
+    // On the launcher's home screen (nothing scrollable), wheel-method flicks act as
+    // shortcuts: up = open app drawer, down = notification shade.
+    fun isScrollHomeShortcutsEnabled(): Boolean = prefs.getBoolean(KEY_SCROLL_HOME_SHORTCUTS, true)
+
+    fun setScrollHomeShortcutsEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_SCROLL_HOME_SHORTCUTS, enabled).apply()
+    }
+
+    // Real-wheel-only options (global).
+    fun isScrollAccelerationEnabled(): Boolean = prefs.getBoolean(KEY_SCROLL_GLOBAL_ACCEL, true)
+
+    fun setScrollAccelerationEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_SCROLL_GLOBAL_ACCEL, enabled).apply()
+    }
+
+    fun getScrollSmoothness(): ScrollSmoothness =
+        ScrollSmoothness.fromPrefValue(prefs.getInt(KEY_SCROLL_GLOBAL_SMOOTHNESS, ScrollSmoothness.NORMAL.prefValue))
+
+    fun setScrollSmoothness(smoothness: ScrollSmoothness) {
+        prefs.edit().putInt(KEY_SCROLL_GLOBAL_SMOOTHNESS, smoothness.prefValue).apply()
+    }
+
+    fun getScrollInertia(): ScrollInertia =
+        ScrollInertia.fromPrefValue(prefs.getInt(KEY_SCROLL_GLOBAL_INERTIA, ScrollInertia.MEDIUM.prefValue))
+
+    fun setScrollInertia(inertia: ScrollInertia) {
+        prefs.edit().putInt(KEY_SCROLL_GLOBAL_INERTIA, inertia.prefValue).apply()
     }
 
     fun setGlobalScrollSensitivity(sensitivity: ScrollSensitivity) {
@@ -538,10 +602,15 @@ class Prefs(context: Context) {
 
     // ---- Per-app scroll settings ----
 
+    // Checks the known keys directly. (Previously this copied the entire prefs map
+    // via prefs.all on every scroll key press, and the suffix match could also hit
+    // packages whose name merely ended with "_<packageName>".)
     private fun hasAnyAppScrollSettings(packageName: String): Boolean {
-        return prefs.all.keys.any { key ->
-            key.startsWith(PREFIX_SCROLL_APP) && key.endsWith("_$packageName")
-        }
+        return prefs.contains(keyScrollAppSens(packageName)) ||
+                prefs.contains(keyScrollAppHorizontal(packageName)) ||
+                prefs.contains(keyScrollAppInvV(packageName)) ||
+                prefs.contains(keyScrollAppInvH(packageName)) ||
+                prefs.contains(keyScrollAppMethod(packageName))
     }
 
     fun getAppScrollSettings(packageName: String): ScrollSettings? {
@@ -570,11 +639,17 @@ class Prefs(context: Context) {
             prefs.getBoolean(invHKey, global.invertHorizontal)
         } else global.invertHorizontal
 
+        val methodKey = keyScrollAppMethod(packageName)
+        val method = if (prefs.contains(methodKey)) {
+            ScrollMethod.fromPrefValue(prefs.getInt(methodKey, global.method.prefValue))
+        } else global.method
+
         return ScrollSettings(
             sensitivity = sens,
             horizontalEnabled = horizontal,
             invertVertical = invertV,
-            invertHorizontal = invertH
+            invertHorizontal = invertH,
+            method = method
         )
     }
 
@@ -599,6 +674,151 @@ class Prefs(context: Context) {
     fun setAppScrollInvertHorizontal(packageName: String, invert: Boolean) {
         prefs.edit().putBoolean(keyScrollAppInvH(packageName), invert).apply()
     }
+
+    /** null = use the global scroll method. */
+    fun setAppScrollMethod(packageName: String, method: ScrollMethod?) {
+        val e = prefs.edit()
+        if (method == null) e.remove(keyScrollAppMethod(packageName))
+        else e.putInt(keyScrollAppMethod(packageName), method.prefValue)
+        e.apply()
+    }
+
+    fun getAppScrollMethodOverride(packageName: String): ScrollMethod? {
+        val k = keyScrollAppMethod(packageName)
+        return if (prefs.contains(k)) ScrollMethod.fromPrefValue(prefs.getInt(k, 0)) else null
+    }
+
+    // ---- Edge auto-scroll (experimental) ----
+    // Global values plus optional per-app overrides for the on/off switch and each direction.
+    // Overrides are stored only when they differ from global (like other per-app settings).
+
+    fun getGlobalEdgeScrollSettings(): EdgeScrollSettings = EdgeScrollSettings(
+        enabled = prefs.getBoolean(KEY_EDGE_ENABLED, false),
+        up = prefs.getBoolean(KEY_EDGE_UP, true),
+        down = prefs.getBoolean(KEY_EDGE_DOWN, true),
+        left = prefs.getBoolean(KEY_EDGE_LEFT, false),
+        right = prefs.getBoolean(KEY_EDGE_RIGHT, false),
+        inMouseMode = prefs.getBoolean(KEY_EDGE_IN_MOUSE, true),
+        inKeyboardMode = prefs.getBoolean(KEY_EDGE_IN_KEYBOARD, true),
+        speedOverride = prefs.getInt(KEY_EDGE_SPEED, EDGE_SPEED_MATCH).let { v ->
+            if (v == EDGE_SPEED_MATCH) null else ScrollSensitivity.fromPrefValue(v)
+        }
+    )
+
+    fun setGlobalEdgeScrollEnabled(v: Boolean) = prefs.edit().putBoolean(KEY_EDGE_ENABLED, v).apply()
+    fun setGlobalEdgeScrollUp(v: Boolean) = prefs.edit().putBoolean(KEY_EDGE_UP, v).apply()
+    fun setGlobalEdgeScrollDown(v: Boolean) = prefs.edit().putBoolean(KEY_EDGE_DOWN, v).apply()
+    fun setGlobalEdgeScrollLeft(v: Boolean) = prefs.edit().putBoolean(KEY_EDGE_LEFT, v).apply()
+    fun setGlobalEdgeScrollRight(v: Boolean) = prefs.edit().putBoolean(KEY_EDGE_RIGHT, v).apply()
+    fun setGlobalEdgeScrollInMouse(v: Boolean) = prefs.edit().putBoolean(KEY_EDGE_IN_MOUSE, v).apply()
+    fun setGlobalEdgeScrollInKeyboard(v: Boolean) = prefs.edit().putBoolean(KEY_EDGE_IN_KEYBOARD, v).apply()
+    /** null = match the scroll wheel sensitivity (default). */
+    fun setGlobalEdgeScrollSpeed(v: ScrollSensitivity?) =
+        prefs.edit().putInt(KEY_EDGE_SPEED, v?.prefValue ?: EDGE_SPEED_MATCH).apply()
+
+    private fun appBool(key: String, global: Boolean): Boolean =
+        if (prefs.contains(key)) prefs.getBoolean(key, global) else global
+
+    fun getEffectiveEdgeScrollSettings(packageName: String?): EdgeScrollSettings {
+        val g = getGlobalEdgeScrollSettings()
+        if (packageName.isNullOrEmpty()) return g
+        return g.copy(
+            enabled = appBool(keyEdgeApp("enabled", packageName), g.enabled),
+            up = appBool(keyEdgeApp("up", packageName), g.up),
+            down = appBool(keyEdgeApp("down", packageName), g.down),
+            left = appBool(keyEdgeApp("left", packageName), g.left),
+            right = appBool(keyEdgeApp("right", packageName), g.right)
+        )
+    }
+
+    /** True if edge scrolling could be on for any app (global on, or some app turns it on). */
+    fun isEdgeScrollUsedAnywhere(): Boolean {
+        if (prefs.getBoolean(KEY_EDGE_ENABLED, false)) return true
+        val prefix = "edge_scroll_app_enabled_"
+        return prefs.all.any { (k, v) -> k.startsWith(prefix) && v == true }
+    }
+
+    /** Store per-app values; any that match global are removed so the app follows global. */
+    fun setAppEdgeScroll(
+        packageName: String,
+        enabled: Boolean,
+        up: Boolean,
+        down: Boolean,
+        left: Boolean,
+        right: Boolean
+    ) {
+        val g = getGlobalEdgeScrollSettings()
+        prefs.edit().apply {
+            fun put(name: String, value: Boolean, global: Boolean) {
+                val k = keyEdgeApp(name, packageName)
+                if (value == global) remove(k) else putBoolean(k, value)
+            }
+            put("enabled", enabled, g.enabled)
+            put("up", up, g.up)
+            put("down", down, g.down)
+            put("left", left, g.left)
+            put("right", right, g.right)
+        }.apply()
+    }
+
+    // ---- Trackpad tap gestures (experimental) ----
+    // Global on/off + double/triple tap actions, each with optional per-app overrides.
+
+    fun getGlobalPadGestureSettings(): PadGestureSettings = PadGestureSettings(
+        enabled = prefs.getBoolean(KEY_PAD_GESTURES, false),
+        doubleTap = PadTapAction.fromPrefValue(
+            prefs.getInt(KEY_PAD_DOUBLE_ACTION, PadTapAction.QUICK_TOGGLE.prefValue), PadTapAction.QUICK_TOGGLE
+        ),
+        tripleTap = PadTapAction.fromPrefValue(
+            prefs.getInt(KEY_PAD_TRIPLE_ACTION, PadTapAction.NONE.prefValue), PadTapAction.NONE
+        )
+    )
+
+    fun setGlobalPadGesturesEnabled(v: Boolean) = prefs.edit().putBoolean(KEY_PAD_GESTURES, v).apply()
+    fun setGlobalPadDoubleTapAction(a: PadTapAction) = prefs.edit().putInt(KEY_PAD_DOUBLE_ACTION, a.prefValue).apply()
+    fun setGlobalPadTripleTapAction(a: PadTapAction) = prefs.edit().putInt(KEY_PAD_TRIPLE_ACTION, a.prefValue).apply()
+
+    /** Per-app action override, or null to follow global. */
+    fun getAppPadTapActionOverride(packageName: String, taps: Int): PadTapAction? {
+        val k = keyPadAppAction(taps, packageName)
+        if (!prefs.contains(k)) return null
+        return PadTapAction.values().firstOrNull { it.prefValue == prefs.getInt(k, -1) }
+    }
+
+    fun getEffectivePadGestureSettings(packageName: String?): PadGestureSettings {
+        val g = getGlobalPadGestureSettings()
+        if (packageName.isNullOrEmpty()) return g
+        return PadGestureSettings(
+            enabled = appBool(keyPadAppEnabled(packageName), g.enabled),
+            doubleTap = getAppPadTapActionOverride(packageName, 2) ?: g.doubleTap,
+            tripleTap = getAppPadTapActionOverride(packageName, 3) ?: g.tripleTap
+        )
+    }
+
+    /** [doubleTap]/[tripleTap] null = follow global. Enabled is stored only if it differs from global. */
+    fun setAppPadGestures(packageName: String, enabled: Boolean, doubleTap: PadTapAction?, tripleTap: PadTapAction?) {
+        val g = getGlobalPadGestureSettings()
+        prefs.edit().apply {
+            val ek = keyPadAppEnabled(packageName)
+            if (enabled == g.enabled) remove(ek) else putBoolean(ek, enabled)
+            val dk = keyPadAppAction(2, packageName)
+            if (doubleTap == null) remove(dk) else putInt(dk, doubleTap.prefValue)
+            val tk = keyPadAppAction(3, packageName)
+            if (tripleTap == null) remove(tk) else putInt(tk, tripleTap.prefValue)
+        }.apply()
+    }
+
+    /** True if tap gestures could be on for any app (global on, or some app turns them on). */
+    fun isPadGesturesUsedAnywhere(): Boolean {
+        if (prefs.getBoolean(KEY_PAD_GESTURES, false)) return true
+        return prefs.all.any { (k, v) -> k.startsWith(PREFIX_PAD_APP_ENABLED) && v == true }
+    }
+
+    fun registerListener(l: android.content.SharedPreferences.OnSharedPreferenceChangeListener) =
+        prefs.registerOnSharedPreferenceChangeListener(l)
+
+    fun unregisterListener(l: android.content.SharedPreferences.OnSharedPreferenceChangeListener) =
+        prefs.unregisterOnSharedPreferenceChangeListener(l)
 
     // ---- Internal helpers ----
 
@@ -643,6 +863,8 @@ class Prefs(context: Context) {
         private const val PREFIX_APP_MODE = "app_mode_"
         private fun keyAppMode(pkg: String) = "$PREFIX_APP_MODE$pkg"
 
+        private const val KEY_CURSOR_SPEED = "cursor_speed"
+        private const val KEY_MODE_NOTIFICATION = "mode_notification"
         private const val KEY_TOAST_QUICK_TOGGLE = "toast_quick_toggle"
         private const val KEY_TOAST_PER_APP = "toast_per_app"
         private const val KEY_TOAST_DEFAULT_MODE = "toast_default_mode"
@@ -699,12 +921,40 @@ class Prefs(context: Context) {
         private const val KEY_SCROLL_GLOBAL_HORIZONTAL = "scroll_global_horizontal"
         private const val KEY_SCROLL_GLOBAL_INV_V = "scroll_global_inv_v"
         private const val KEY_SCROLL_GLOBAL_INV_H = "scroll_global_inv_h"
+        private const val KEY_SCROLL_GLOBAL_ACCEL = "scroll_global_accel"
+        private const val KEY_SCROLL_GLOBAL_SMOOTHNESS = "scroll_global_smoothness"
+        private const val KEY_SCROLL_GLOBAL_METHOD = "scroll_global_method_v2"
+        private const val KEY_SCROLL_HOME_SHORTCUTS = "scroll_home_shortcuts"
+        private const val KEY_SCROLL_GLOBAL_INERTIA = "scroll_global_inertia"
 
-        private const val PREFIX_SCROLL_APP = "scroll_app_"
+        // Edge auto-scroll (experimental)
+        private const val KEY_EDGE_ENABLED = "edge_scroll_enabled"
+        private const val KEY_EDGE_UP = "edge_scroll_up"
+        private const val KEY_EDGE_DOWN = "edge_scroll_down"
+        private const val KEY_EDGE_LEFT = "edge_scroll_left"
+        private const val KEY_EDGE_RIGHT = "edge_scroll_right"
+        private const val KEY_EDGE_IN_MOUSE = "edge_scroll_in_mouse"
+        private const val KEY_EDGE_IN_KEYBOARD = "edge_scroll_in_keyboard"
+        private const val KEY_EDGE_SPEED = "edge_scroll_speed2"
+        private const val EDGE_SPEED_MATCH = -1
+        private fun keyEdgeApp(name: String, pkg: String) = "edge_scroll_app_${name}_$pkg"
+        const val EDGE_KEY_PREFIX = "edge_scroll_"
+
+        // Trackpad tap gestures (experimental)
+        private const val KEY_PAD_GESTURES = "pad_gestures_enabled"
+        private const val KEY_PAD_DOUBLE_ACTION = "pad_gestures_double_action"
+        private const val KEY_PAD_TRIPLE_ACTION = "pad_gestures_triple_action"
+        private const val PREFIX_PAD_APP_ENABLED = "pad_gestures_app_enabled_"
+        private fun keyPadAppEnabled(pkg: String) = "$PREFIX_PAD_APP_ENABLED$pkg"
+        private fun keyPadAppAction(taps: Int, pkg: String) =
+            if (taps == 3) "pad_gestures_app_triple_$pkg" else "pad_gestures_app_double_$pkg"
+        const val PAD_GESTURES_KEY_PREFIX = "pad_gestures_"
+
         private fun keyScrollAppSens(pkg: String) = "scroll_app_sens_$pkg"
         private fun keyScrollAppHorizontal(pkg: String) = "scroll_app_horizontal_$pkg"
         private fun keyScrollAppInvV(pkg: String) = "scroll_app_inv_v_$pkg"
         private fun keyScrollAppInvH(pkg: String) = "scroll_app_inv_h_$pkg"
+        private fun keyScrollAppMethod(pkg: String) = "scroll_app_method_v2_$pkg"
 
         const val DEFAULT_HOLD_KEYCODE = 59 // KEYCODE_SHIFT_LEFT
         const val DEFAULT_HOLD2_KEYCODE = 60 // KEYCODE_SHIFT_RIGHT
@@ -717,9 +967,7 @@ class Prefs(context: Context) {
             // Popular keyboards
             "com.blackberry.keyboard",
             "com.google.android.inputmethod.latin", // Gboard
-            "com.touchtype.swiftkey",            // SwiftKey
-            "it.srik.TypeQ25",                  // TypeQ25
-            "com.duc1607.q25keyboard"           // Dave's Q25 Keyboard
+            "com.touchtype.swiftkey"             // SwiftKey
         )
 
         fun applyThemeFromPrefs(context: Context) {

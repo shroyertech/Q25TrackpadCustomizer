@@ -15,6 +15,7 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.View
 import android.view.ViewGroup
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
@@ -71,6 +72,27 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var checkScrollHorizontal: CheckBox
     private lateinit var checkScrollInvertVertical: CheckBox
     private lateinit var checkScrollInvertHorizontal: CheckBox
+    private lateinit var spinnerScrollSmoothness: Spinner
+    private lateinit var spinnerScrollMethod: Spinner
+    private lateinit var checkScrollHomeShortcuts: CheckBox
+    private lateinit var checkScrollAcceleration: CheckBox
+    private lateinit var spinnerScrollInertia: Spinner
+
+    // Experimental
+    private lateinit var checkEdgeScrollEnabled: CheckBox
+    private lateinit var checkEdgeScrollUp: CheckBox
+    private lateinit var checkEdgeScrollDown: CheckBox
+    private lateinit var checkEdgeScrollLeft: CheckBox
+    private lateinit var checkEdgeScrollRight: CheckBox
+    private lateinit var checkEdgeScrollInMouse: CheckBox
+    private lateinit var checkEdgeScrollInKeyboard: CheckBox
+    private lateinit var spinnerEdgeScrollSpeed: Spinner
+    private lateinit var checkPadGestures: CheckBox
+    private lateinit var spinnerPadDoubleTap: Spinner
+    private lateinit var spinnerPadTripleTap: Spinner
+    private lateinit var tvEdgeScrollStatus: TextView
+    private lateinit var tvPadTapStatus: TextView
+    private val padTapOptions = PadTapAction.values().toList()
 
     // Backup/restore
     private lateinit var btnBackupSettings: Button
@@ -111,6 +133,42 @@ class SettingsActivity : AppCompatActivity() {
         ScrollSensitivity.SLOW,
         ScrollSensitivity.MEDIUM,
         ScrollSensitivity.FAST
+    )
+
+    private val scrollSmoothOptions = listOf(
+        ScrollSmoothness.SNAPPY,
+        ScrollSmoothness.NORMAL,
+        ScrollSmoothness.SMOOTH
+    )
+
+    private val scrollSmoothLabels = listOf(
+        "Snappy",
+        "Normal",
+        "Smooth"
+    )
+
+    private val scrollInertiaOptions = listOf(
+        ScrollInertia.OFF,
+        ScrollInertia.LOW,
+        ScrollInertia.MEDIUM,
+        ScrollInertia.HIGH
+    )
+
+    private val scrollInertiaLabels = listOf(
+        "Off (stop where you stop)",
+        "Low",
+        "Medium",
+        "High"
+    )
+
+    private val scrollMethodOptions = listOf(
+        ScrollMethod.CLASSIC,
+        ScrollMethod.TOUCH
+    )
+
+    private val scrollMethodLabels = listOf(
+        "Classic (original swipes)",
+        "Touch (follows your finger, needs root)"
     )
 
     private val scrollSensLabels = listOf(
@@ -173,6 +231,77 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
+    // ---------- Section navigation ----------
+    //
+    // The settings page opens on a short menu; each entry shows one section of the
+    // settings (the other sections are hidden). Back returns to the menu.
+
+    private val sectionIds = linkedMapOf(
+        R.id.menuGeneral to (R.id.sectionGeneral to "General"),
+        R.id.menuQuickToggle to (R.id.sectionQuickToggle to "Quick Toggle"),
+        R.id.menuHold to (R.id.sectionHold to "Hold-key switching"),
+        R.id.menuScroll to (R.id.sectionScroll to "Scrolling"),
+        R.id.menuExperimental to (R.id.sectionExperimental to "Gestures & edge scroll"),
+        R.id.menuExcluded to (R.id.sectionExcluded to "Excluded apps"),
+        R.id.menuAbout to (R.id.sectionAbout to "Backup, updates & about")
+    )
+    private var openSectionId = 0
+
+    private fun setupSectionNavigation(savedInstanceState: Bundle?) {
+        for ((menuId, target) in sectionIds) {
+            findViewById<View>(menuId).setOnClickListener { showSection(target.first) }
+        }
+        findViewById<TextView>(R.id.tvSettingsTitle).setOnClickListener {
+            if (openSectionId != 0) showSection(0)
+        }
+        // The app theme turns Buttons into MaterialButtons, which ignore drawableStart:
+        // set the heart as the button icon, keeping its own red colour.
+        (findViewById<View>(R.id.btnDonate) as? com.google.android.material.button.MaterialButton)?.apply {
+            setIconResource(R.drawable.ic_heart_24)
+            iconTint = null
+            iconGravity = com.google.android.material.button.MaterialButton.ICON_GRAVITY_TEXT_START
+            iconPadding = (8 * resources.displayMetrics.density).toInt()
+        }
+        findViewById<View>(R.id.btnDonate).setOnClickListener {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(DONATE_URL)))
+            } catch (_: Exception) {
+                Toast.makeText(this, "No browser found", Toast.LENGTH_SHORT).show()
+            }
+        }
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (openSectionId != 0) {
+                    showSection(0)
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        })
+        showSection(savedInstanceState?.getInt(STATE_SECTION, 0) ?: 0)
+    }
+
+    /** Show one section (0 = the menu). */
+    private fun showSection(sectionId: Int) {
+        openSectionId = sectionId
+        findViewById<View>(R.id.sectionMenu).visibility = if (sectionId == 0) View.VISIBLE else View.GONE
+        var title = "Settings"
+        for ((_, target) in sectionIds) {
+            val (id, name) = target
+            val show = id == sectionId
+            findViewById<View>(id).visibility = if (show) View.VISIBLE else View.GONE
+            if (show) title = "‹  $name"
+        }
+        findViewById<TextView>(R.id.tvSettingsTitle).text = title
+        findViewById<android.widget.ScrollView>(R.id.scrollSettingsRoot).scrollTo(0, 0)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putInt(STATE_SECTION, openSectionId)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         Prefs.applyThemeFromPrefs(this)
         super.onCreate(savedInstanceState)
@@ -183,6 +312,8 @@ class SettingsActivity : AppCompatActivity() {
         // Header
         tvSettingsVersion = findViewById(R.id.tvSettingsVersion)
         tvSettingsVersion.text = "v${getAppVersionName()}"
+
+        setupSectionNavigation(savedInstanceState)
 
         // Initial setup buttons
         btnTestRootAccess = findViewById(R.id.btnTestRootAccess)
@@ -225,6 +356,24 @@ class SettingsActivity : AppCompatActivity() {
         checkScrollHorizontal = findViewById(R.id.checkScrollHorizontal)
         checkScrollInvertVertical = findViewById(R.id.checkScrollInvertVertical)
         checkScrollInvertHorizontal = findViewById(R.id.checkScrollInvertHorizontal)
+        spinnerScrollSmoothness = findViewById(R.id.spinnerScrollSmoothness)
+        spinnerScrollMethod = findViewById(R.id.spinnerScrollMethod)
+        checkScrollHomeShortcuts = findViewById(R.id.checkScrollHomeShortcuts)
+        checkScrollAcceleration = findViewById(R.id.checkScrollAcceleration)
+        spinnerScrollInertia = findViewById(R.id.spinnerScrollInertia)
+        checkEdgeScrollEnabled = findViewById(R.id.checkEdgeScrollEnabled)
+        checkEdgeScrollUp = findViewById(R.id.checkEdgeScrollUp)
+        checkEdgeScrollDown = findViewById(R.id.checkEdgeScrollDown)
+        checkEdgeScrollLeft = findViewById(R.id.checkEdgeScrollLeft)
+        checkEdgeScrollRight = findViewById(R.id.checkEdgeScrollRight)
+        checkEdgeScrollInMouse = findViewById(R.id.checkEdgeScrollInMouse)
+        checkEdgeScrollInKeyboard = findViewById(R.id.checkEdgeScrollInKeyboard)
+        spinnerEdgeScrollSpeed = findViewById(R.id.spinnerEdgeScrollSpeed)
+        checkPadGestures = findViewById(R.id.checkPadGestures)
+        spinnerPadDoubleTap = findViewById(R.id.spinnerPadDoubleTap)
+        spinnerPadTripleTap = findViewById(R.id.spinnerPadTripleTap)
+        tvEdgeScrollStatus = findViewById(R.id.tvEdgeScrollStatus)
+        tvPadTapStatus = findViewById(R.id.tvPadTapStatus)
 
         // Backup/restore
         btnBackupSettings = findViewById(R.id.btnBackupSettings)
@@ -248,10 +397,12 @@ class SettingsActivity : AppCompatActivity() {
         setupToasts()
         setupQuickToggleSettings()
         setupThemeSpinner()
+        setupCursorAndStatus()
         setupBackupRestore()
         setupAutoKeyboardForText()
         setupHoldKeySettings()
         setupGlobalScrollSettings()
+        setupExperimentalSettings()
         setupExcludedAppsSection()
     }
 
@@ -333,6 +484,23 @@ class SettingsActivity : AppCompatActivity() {
             checkScrollHorizontal.isChecked = scroll.horizontalEnabled
             checkScrollInvertVertical.isChecked = scroll.invertVertical
             checkScrollInvertHorizontal.isChecked = scroll.invertHorizontal
+            val smoothIdx = scrollSmoothOptions.indexOf(prefs.getScrollSmoothness()).coerceAtLeast(0)
+            if (spinnerScrollSmoothness.selectedItemPosition != smoothIdx) {
+                spinnerScrollSmoothness.setSelection(smoothIdx, false)
+            }
+            checkScrollAcceleration.isChecked = prefs.isScrollAccelerationEnabled()
+            val methodIdx = scrollMethodOptions.indexOf(scroll.method).coerceAtLeast(0)
+            if (spinnerScrollMethod.selectedItemPosition != methodIdx) {
+                spinnerScrollMethod.setSelection(methodIdx, false)
+            }
+            checkScrollHomeShortcuts.isChecked = prefs.isScrollHomeShortcutsEnabled()
+            val inertiaIdx = scrollInertiaOptions.indexOf(prefs.getScrollInertia()).coerceAtLeast(0)
+            if (spinnerScrollInertia.selectedItemPosition != inertiaIdx) {
+                spinnerScrollInertia.setSelection(inertiaIdx, false)
+            }
+
+            // Experimental
+            applyExperimentalUiFromPrefs()
 
             // Exclusions
             if (::excludedAdapter.isInitialized) {
@@ -621,16 +789,18 @@ class SettingsActivity : AppCompatActivity() {
 
         Thread {
             val result = testRootAccessDetailed()
+            // Detection runs `su -v`, so do it here on the background thread.
+            val mgr = detectRootManager()
             Handler(Looper.getMainLooper()).post {
                 try { progress.dismiss() } catch (_: Exception) {}
 
                 setupPrefs.edit().putBoolean(KEY_ROOT_GRANTED, result.granted).apply()
 
-                val mgr = detectRootManager()
                 val mgrLine = when (mgr) {
                     RootManager.MAGISK -> "Magisk detected."
                     RootManager.KERNELSU -> "KernelSU detected."
-                    RootManager.UNKNOWN -> "Root manager not detected, or hidden (such as KernelSU)."
+                    RootManager.APATCH -> "APatch detected."
+                    RootManager.UNKNOWN -> "Root manager not detected, or hidden."
                 }
 
                 val msg = buildString {
@@ -648,7 +818,7 @@ class SettingsActivity : AppCompatActivity() {
                 val otherHelpLabel = when (mgr) {
                     RootManager.MAGISK -> "Using KernelSU instead?"
                     RootManager.KERNELSU -> "Using Magisk instead?"
-                    RootManager.UNKNOWN -> "More help"
+                    RootManager.APATCH, RootManager.UNKNOWN -> "More help"
                 }
 
                 showScrollableDialog(
@@ -674,6 +844,9 @@ class SettingsActivity : AppCompatActivity() {
     )
 
     private fun testRootAccessDetailed(): RootTestResult {
+        // The user is (re)checking root, possibly after granting it: let mode switches retry now.
+        RootShell.resetBackoff()
+
         return try {
             val pb = ProcessBuilder("su", "-c", "id")
             val p = pb.start()
@@ -700,36 +873,15 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    private enum class RootManager { MAGISK, KERNELSU, UNKNOWN }
+    private enum class RootManager { MAGISK, KERNELSU, APATCH, UNKNOWN }
 
+    // Blocking (runs `su -v`): only call from a background thread.
     private fun detectRootManager(): RootManager {
-        val pm = packageManager
-
-        val hasMagisk =
-            isPackageInstalled(pm, "com.topjohnwu.magisk") ||
-                    isPackageInstalled(pm, "io.github.vvb2060.magisk")
-
-        val hasKernelSu =
-            isPackageInstalled(pm, "me.weishu.kernelsu")
-
-        return when {
-            hasKernelSu -> RootManager.KERNELSU
-            hasMagisk -> RootManager.MAGISK
-            else -> RootManager.UNKNOWN
-        }
-    }
-
-    private fun isPackageInstalled(pm: PackageManager, pkg: String): Boolean {
-        return try {
-            if (android.os.Build.VERSION.SDK_INT >= 33) {
-                pm.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(0))
-            } else {
-                @Suppress("DEPRECATION")
-                pm.getPackageInfo(pkg, 0)
-            }
-            true
-        } catch (_: Exception) {
-            false
+        return when (RootManagerDetector.detect(this)) {
+            RootManagerDetector.Type.MAGISK -> RootManager.MAGISK
+            RootManagerDetector.Type.KERNELSU -> RootManager.KERNELSU
+            RootManagerDetector.Type.APATCH -> RootManager.APATCH
+            RootManagerDetector.Type.UNKNOWN -> RootManager.UNKNOWN
         }
     }
 
@@ -737,6 +889,7 @@ class SettingsActivity : AppCompatActivity() {
         val managerHint = when (mgr) {
             RootManager.MAGISK -> "Open Magisk > Superuser, find this app, and allow it."
             RootManager.KERNELSU -> "Open KernelSU > Superuser, find this app, and allow it."
+            RootManager.APATCH -> "Open APatch > Superuser, find this app, and allow it."
             RootManager.UNKNOWN -> "Open your root manager’s Superuser list and allow this app."
         }
 
@@ -923,6 +1076,65 @@ If you’re using something else, look for a “Superuser / SU” permission lis
         spinnerQuickToggleFallback.alpha = if (enabled) 1.0f else 0.5f
 
         tvQuickToggleFallbackLabel.alpha = if (enabled) 1.0f else 0.5f
+    }
+
+    // ---------- Diagnostics ----------
+
+    private fun setupDiagnostics() {
+        val tv = findViewById<TextView>(R.id.tvDiagnostics)
+        val btnRun = findViewById<Button>(R.id.btnRunDiagnostics)
+        val btnCopy = findViewById<Button>(R.id.btnCopyDiagnostics)
+        btnRun.setOnClickListener {
+            btnRun.isEnabled = false
+            tv.text = "Running…"
+            Thread {
+                val report = Diagnostics.collect(this)
+                runOnUiThread {
+                    tv.text = report
+                    btnRun.isEnabled = true
+                    btnCopy.visibility = View.VISIBLE
+                }
+            }.start()
+        }
+        btnCopy.setOnClickListener {
+            val cm = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("Q25 diagnostics", tv.text))
+            Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // ---------- Cursor speed + mode notification ----------
+
+    private val cursorSpeedValues = listOf(-6, -3, 0, 3, 6)
+    private val cursorSpeedLabels = listOf("Slowest", "Slow", "Default", "Fast", "Fastest")
+
+    private fun setupCursorAndStatus() {
+        val spinner = findViewById<Spinner>(R.id.spinnerCursorSpeed)
+        val adapter = ArrayAdapter(this, AndroidR.layout.simple_spinner_item, cursorSpeedLabels)
+        adapter.setDropDownViewResource(AndroidR.layout.simple_spinner_dropdown_item)
+        spinner.adapter = adapter
+        val cur = prefs.getCursorSpeed()
+        val idx = cursorSpeedValues.indices.minByOrNull { kotlin.math.abs(cursorSpeedValues[it] - cur) } ?: 2
+        spinner.setSelection(idx, false)
+        spinner.setOnItemSelectedListenerSimple { position ->
+            val v = cursorSpeedValues[position]
+            if (v == prefs.getCursorSpeed()) return@setOnItemSelectedListenerSimple
+            prefs.setCursorSpeed(v)
+            // Android's own pointer speed setting (system-wide); needs root to change.
+            Thread {
+                val ok = RootShell.run("settings put system pointer_speed $v").ok
+                if (!ok) runOnUiThread {
+                    Toast.makeText(this, "Couldn't change cursor speed (root needed)", Toast.LENGTH_SHORT).show()
+                }
+            }.start()
+        }
+
+        val check = findViewById<CheckBox>(R.id.checkModeNotification)
+        check.isChecked = prefs.isModeNotificationEnabled()
+        check.setOnCheckedChangeListener { _, isChecked ->
+            prefs.setModeNotificationEnabled(isChecked)
+            if (!isChecked) NotificationHelper.clearModeStatus(this)
+        }
     }
 
     // ---------- Theme ----------
@@ -1250,6 +1462,158 @@ If you’re using something else, look for a “Superuser / SU” permission lis
             if (suppressUiListeners) return@setOnCheckedChangeListener
             prefs.setGlobalScrollInvertHorizontal(isChecked)
         }
+
+        val smoothAdapter = ArrayAdapter(this, AndroidR.layout.simple_spinner_item, scrollSmoothLabels)
+        smoothAdapter.setDropDownViewResource(AndroidR.layout.simple_spinner_dropdown_item)
+        spinnerScrollSmoothness.adapter = smoothAdapter
+        spinnerScrollSmoothness.setSelection(
+            scrollSmoothOptions.indexOf(prefs.getScrollSmoothness()).coerceAtLeast(0), false
+        )
+        spinnerScrollSmoothness.setOnItemSelectedListenerSimple { position ->
+            if (suppressUiListeners) return@setOnItemSelectedListenerSimple
+            prefs.setScrollSmoothness(scrollSmoothOptions[position])
+        }
+
+        checkScrollAcceleration.isChecked = prefs.isScrollAccelerationEnabled()
+        checkScrollAcceleration.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressUiListeners) return@setOnCheckedChangeListener
+            prefs.setScrollAccelerationEnabled(isChecked)
+        }
+
+        val methodAdapter = ArrayAdapter(this, AndroidR.layout.simple_spinner_item, scrollMethodLabels)
+        methodAdapter.setDropDownViewResource(AndroidR.layout.simple_spinner_dropdown_item)
+        spinnerScrollMethod.adapter = methodAdapter
+        spinnerScrollMethod.setSelection(scrollMethodOptions.indexOf(current.method).coerceAtLeast(0), false)
+        spinnerScrollMethod.setOnItemSelectedListenerSimple { position ->
+            if (suppressUiListeners) return@setOnItemSelectedListenerSimple
+            prefs.setGlobalScrollMethod(scrollMethodOptions[position])
+        }
+
+        checkScrollHomeShortcuts.isChecked = prefs.isScrollHomeShortcutsEnabled()
+        checkScrollHomeShortcuts.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressUiListeners) return@setOnCheckedChangeListener
+            prefs.setScrollHomeShortcutsEnabled(isChecked)
+        }
+
+        val inertiaAdapter = ArrayAdapter(this, AndroidR.layout.simple_spinner_item, scrollInertiaLabels)
+        inertiaAdapter.setDropDownViewResource(AndroidR.layout.simple_spinner_dropdown_item)
+        spinnerScrollInertia.adapter = inertiaAdapter
+        spinnerScrollInertia.setSelection(
+            scrollInertiaOptions.indexOf(prefs.getScrollInertia()).coerceAtLeast(0), false
+        )
+        spinnerScrollInertia.setOnItemSelectedListenerSimple { position ->
+            if (suppressUiListeners) return@setOnItemSelectedListenerSimple
+            prefs.setScrollInertia(scrollInertiaOptions[position])
+        }
+    }
+
+    // ---------- Experimental ----------
+
+    private fun applyExperimentalUiFromPrefs() {
+        val e = prefs.getGlobalEdgeScrollSettings()
+        checkEdgeScrollEnabled.isChecked = e.enabled
+        checkEdgeScrollUp.isChecked = e.up
+        checkEdgeScrollDown.isChecked = e.down
+        checkEdgeScrollLeft.isChecked = e.left
+        checkEdgeScrollRight.isChecked = e.right
+        checkEdgeScrollInMouse.isChecked = e.inMouseMode
+        checkEdgeScrollInKeyboard.isChecked = e.inKeyboardMode
+        val speedIdx = e.speedOverride?.let { scrollSensOptions.indexOf(it) + 1 } ?: 0
+        if (spinnerEdgeScrollSpeed.adapter != null && spinnerEdgeScrollSpeed.selectedItemPosition != speedIdx) {
+            spinnerEdgeScrollSpeed.setSelection(speedIdx, false)
+        }
+        val pad = prefs.getGlobalPadGestureSettings()
+        checkPadGestures.isChecked = pad.enabled
+        if (spinnerPadDoubleTap.adapter != null) {
+            spinnerPadDoubleTap.setSelection(padTapOptions.indexOf(pad.doubleTap).coerceAtLeast(0), false)
+            spinnerPadTripleTap.setSelection(padTapOptions.indexOf(pad.tripleTap).coerceAtLeast(0), false)
+        }
+        updateEdgeScrollEnabledState()
+        updateExperimentalStatus()
+    }
+
+    private fun updateExperimentalStatus() {
+        tvEdgeScrollStatus.text = "Status: ${AppState.edgeScrollStatus}"
+        tvPadTapStatus.text = "Status: ${AppState.padTapStatus}"
+    }
+
+    private fun updatePadGesturesEnabledState() {
+        val on = checkPadGestures.isChecked
+        for (v in listOf(spinnerPadDoubleTap, spinnerPadTripleTap)) {
+            v.isEnabled = on
+            v.alpha = if (on) 1f else 0.5f
+        }
+    }
+
+    private fun updateEdgeScrollEnabledState() {
+        val on = checkEdgeScrollEnabled.isChecked
+        val alpha = if (on) 1f else 0.5f
+        for (v in listOf(
+            checkEdgeScrollUp, checkEdgeScrollDown, checkEdgeScrollLeft, checkEdgeScrollRight,
+            checkEdgeScrollInMouse, checkEdgeScrollInKeyboard, spinnerEdgeScrollSpeed
+        )) {
+            v.isEnabled = on
+            v.alpha = alpha
+        }
+    }
+
+    private fun setupExperimentalSettings() {
+        for (sp in listOf(spinnerPadDoubleTap, spinnerPadTripleTap)) {
+            val a = ArrayAdapter(this, AndroidR.layout.simple_spinner_item, padTapOptions.map { it.label })
+            a.setDropDownViewResource(AndroidR.layout.simple_spinner_dropdown_item)
+            sp.adapter = a
+        }
+
+        val speedAdapter = ArrayAdapter(
+            this, AndroidR.layout.simple_spinner_item,
+            listOf("Match scroll wheel settings") + scrollSensLabels
+        )
+        speedAdapter.setDropDownViewResource(AndroidR.layout.simple_spinner_dropdown_item)
+        spinnerEdgeScrollSpeed.adapter = speedAdapter
+
+        suppressUiListeners = true
+        try {
+            applyExperimentalUiFromPrefs()
+        } finally {
+            suppressUiListeners = false
+        }
+
+        fun bind(cb: CheckBox, save: (Boolean) -> Unit) {
+            cb.setOnCheckedChangeListener { _, isChecked ->
+                if (suppressUiListeners) return@setOnCheckedChangeListener
+                save(isChecked)
+            }
+        }
+        bind(checkEdgeScrollEnabled) {
+            prefs.setGlobalEdgeScrollEnabled(it)
+            updateEdgeScrollEnabledState()
+            checkEdgeScrollEnabled.postDelayed({ updateExperimentalStatus() }, 1500)
+        }
+        bind(checkEdgeScrollUp) { prefs.setGlobalEdgeScrollUp(it) }
+        bind(checkEdgeScrollDown) { prefs.setGlobalEdgeScrollDown(it) }
+        bind(checkEdgeScrollLeft) { prefs.setGlobalEdgeScrollLeft(it) }
+        bind(checkEdgeScrollRight) { prefs.setGlobalEdgeScrollRight(it) }
+        bind(checkEdgeScrollInMouse) { prefs.setGlobalEdgeScrollInMouse(it) }
+        bind(checkEdgeScrollInKeyboard) { prefs.setGlobalEdgeScrollInKeyboard(it) }
+        bind(checkPadGestures) {
+            prefs.setGlobalPadGesturesEnabled(it)
+            updatePadGesturesEnabledState()
+            checkPadGestures.postDelayed({ updateExperimentalStatus() }, 1500)
+        }
+        updatePadGesturesEnabledState()
+        spinnerPadDoubleTap.setOnItemSelectedListenerSimple { position ->
+            if (suppressUiListeners) return@setOnItemSelectedListenerSimple
+            prefs.setGlobalPadDoubleTapAction(padTapOptions[position])
+        }
+        spinnerPadTripleTap.setOnItemSelectedListenerSimple { position ->
+            if (suppressUiListeners) return@setOnItemSelectedListenerSimple
+            prefs.setGlobalPadTripleTapAction(padTapOptions[position])
+        }
+
+        spinnerEdgeScrollSpeed.setOnItemSelectedListenerSimple { position ->
+            if (suppressUiListeners) return@setOnItemSelectedListenerSimple
+            prefs.setGlobalEdgeScrollSpeed(if (position == 0) null else scrollSensOptions[position - 1])
+        }
     }
 
     // ---------- Backup & Restore ----------
@@ -1307,6 +1671,7 @@ If you’re using something else, look for a “Superuser / SU” permission lis
     private fun setupViewOnGitHubLink() {
         tvViewOnGitHub.paintFlags = tvViewOnGitHub.paintFlags or Paint.UNDERLINE_TEXT_FLAG
         tvViewOnGitHub.setOnClickListener { openGitHubReleasePage() }
+        setupDiagnostics()
     }
 
     private fun openGitHubReleasePage() {
@@ -1559,6 +1924,8 @@ If you’re using something else, look for a “Superuser / SU” permission lis
     }
 
     companion object {
+        private const val STATE_SECTION = "open_section"
+        private const val DONATE_URL = "https://give.wvu.edu/give/430764/#!/donation/checkout"
         private const val SETUP_PREFS = "setup_state"
         const val KEY_ROOT_GRANTED = "root_granted"
 

@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.text.Editable
@@ -40,6 +41,9 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var appListAdapter: AppListAdapter
     private var allApps: List<AppItem> = emptyList()
+
+    // App list loading runs off the main thread; the generation counter drops stale results.
+    private var appListLoadGeneration = 0
 
     private val systemDefaultOptions = listOf(
         Mode.MOUSE,
@@ -102,6 +106,17 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         prefs = Prefs(this)
+
+        // Toasts from the background service (mode switches, Quick Toggle) are dropped by
+        // Android while the app's notifications are off, so ask once on Android 13+.
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission("android.permission.POST_NOTIFICATIONS") != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            try {
+                requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 1001)
+            } catch (_: Exception) {
+            }
+        }
 
         spinnerSystemDefault = findViewById(R.id.spinnerSystemDefault)
         spinnerSetAllMode = findViewById(R.id.spinnerSetAllMode)
@@ -202,15 +217,28 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupAppList() {
         recyclerApps.layoutManager = LinearLayoutManager(this)
-        allApps = loadLaunchableApps()
+        // Starts empty; onResume() fills it (previously the list, including every icon, was
+        // loaded on the main thread here and then loaded again in onResume).
         appListAdapter = AppListAdapter(this, allApps, prefs)
         recyclerApps.adapter = appListAdapter
     }
 
     private fun refreshAppList(currentQuery: String) {
-        allApps = loadLaunchableApps()
-        appListAdapter.updateApps(allApps)
-        appListAdapter.filter(currentQuery)
+        val generation = ++appListLoadGeneration
+        Thread {
+            val apps = try {
+                loadLaunchableApps()
+            } catch (_: Exception) {
+                null
+            }
+            runOnUiThread {
+                if (apps == null || generation != appListLoadGeneration) return@runOnUiThread
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                allApps = apps
+                appListAdapter.updateApps(apps)
+                appListAdapter.filter(editSearch.text?.toString() ?: currentQuery)
+            }
+        }.start()
     }
 
     private fun setupSearch() {
@@ -224,7 +252,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * Package names of launchable apps, minus excluded apps and myself. No labels/icons.
+     */
+    private fun loadLaunchablePackageNames(): Set<String> {
+        val intent = Intent(Intent.ACTION_MAIN, null).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+        }
+        val excluded = prefs.getExcludedPackages()
+        val out = LinkedHashSet<String>()
+        for (ri in packageManager.queryIntentActivities(intent, 0)) {
+            val pkg = ri.activityInfo.packageName
+            if (pkg != packageName && !excluded.contains(pkg)) out.add(pkg)
+        }
+        return out
+    }
+
+    /**
      * Load launchable apps and filter out excluded apps and myself.
+     * Loads labels and icons, so call it off the main thread.
      */
     private fun loadLaunchableApps(): List<AppItem> {
         val pm = packageManager
@@ -254,15 +299,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setAllAppsToMode(mode: Mode) {
-        val apps = loadLaunchableApps()
-        apps.forEach { app ->
-            prefs.setAppMode(app.packageName, mode)
-        }
+        // Only package names are needed here (no icons), and one prefs write for all apps.
+        val packages = loadLaunchablePackageNames()
+        prefs.setAppModes(packages, mode)
         Toast.makeText(
             this,
-            "Set ${apps.size} apps to ${modeLabel(mode)}",
+            "Set ${packages.size} apps to ${modeLabel(mode)}",
             Toast.LENGTH_SHORT
         ).show()
+        refreshAppList(editSearch.text?.toString().orEmpty())
     }
 
     private fun modeLabel(mode: Mode): String {
@@ -571,84 +616,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Blocking (runs `su -v`): only call from a background thread.
     private fun detectRootManager(): RootManager {
-
-        fun hasPkg(pkg: String): Boolean {
-            return try {
-                if (android.os.Build.VERSION.SDK_INT >= 33) {
-                    packageManager.getPackageInfo(
-                        pkg,
-                        PackageManager.PackageInfoFlags.of(0)
-                    )
-                } else {
-                    @Suppress("DEPRECATION")
-                    packageManager.getPackageInfo(pkg, 0)
-                }
-                true
-            } catch (_: Exception) {
-                false
-            }
+        return when (RootManagerDetector.detect(this)) {
+            RootManagerDetector.Type.MAGISK -> RootManager.MAGISK
+            RootManagerDetector.Type.KERNELSU -> RootManager.KERNELSU
+            RootManagerDetector.Type.APATCH, RootManagerDetector.Type.UNKNOWN -> RootManager.OTHER
         }
-
-        fun hasAppLabel(labels: List<String>): Boolean {
-            val pm = packageManager
-            val installedApps = if (android.os.Build.VERSION.SDK_INT >= 33) {
-                pm.getInstalledApplications(
-                    PackageManager.ApplicationInfoFlags.of(0)
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                pm.getInstalledApplications(0)
-            }
-
-            return installedApps.any { app ->
-                val label = app.loadLabel(pm).toString().lowercase()
-                labels.any { label.contains(it) }
-            }
-        }
-
-        // ---- KernelSU ----
-
-        val kernelSuPackages = listOf(
-            "me.weishu.kernelsu",
-            "vaurmet.nfdvv.ztmdui"
-        )
-
-        if (kernelSuPackages.any { hasPkg(it) }) {
-            return RootManager.KERNELSU
-        }
-
-        val kernelSuLabels = listOf(
-            "kernelsu",
-            "kernelsu next"
-        )
-
-        if (hasAppLabel(kernelSuLabels)) {
-            return RootManager.KERNELSU
-        }
-
-        // ---- Magisk ----
-
-        val magiskPackages = listOf(
-            "com.topjohnwu.magisk"
-        )
-
-        if (magiskPackages.any { hasPkg(it) }) {
-            return RootManager.MAGISK
-        }
-
-        val magiskLabels = listOf(
-            "magisk"
-        )
-
-        if (hasAppLabel(magiskLabels)) {
-            return RootManager.MAGISK
-        }
-
-        return RootManager.OTHER
     }
 
     private fun testRootAccessDetailed(): RootAccessResult {
+        // The user is (re)checking root, possibly after granting it: let mode switches retry now.
+        RootShell.resetBackoff()
+
         val manager = detectRootManager()
 
         // This will trigger Magisk/KSU prompt when needed.
@@ -692,7 +672,7 @@ class MainActivity : AppCompatActivity() {
             RootManager.KERNELSU ->
                 "Open KernelSU > Superuser/App list and allow this app."
             RootManager.OTHER ->
-                "If you use a different root manager, like KernelSU, look for a Superuser/Root access list and allow this app."
+                "If you use a different root manager, like APatch, look for a Superuser/Root access list and allow this app."
         }
 
         val a11yHelpShort =

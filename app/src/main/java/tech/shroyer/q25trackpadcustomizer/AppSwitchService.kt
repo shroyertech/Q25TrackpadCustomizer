@@ -2,11 +2,15 @@ package tech.shroyer.q25trackpadcustomizer
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.database.ContentObserver
 import android.graphics.Path
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.provider.Settings
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -18,30 +22,139 @@ import java.util.concurrent.Executors
  * Tracks foreground app changes and key events, applying trackpad mode and scroll behavior.
  * Supports temporary Keyboard override while editing text, plus hold-key temporary switching.
  *
- * Updated:
  *  - Secondary Hold support (separate mode/key/allow-in-text/double-press).
  *  - Optional "require double press + hold" for Primary Hold and Secondary Hold.
  *  - Optional "Secondary Hold is triggered by Primary Hold double-press + hold".
+ *
+ * Threading: everything here runs on the main thread, which is also where key events
+ * are filtered. Root/proc I/O is never done here directly; it goes through
+ * [TrackpadController.requestMode], which runs on a background thread and calls back.
+ * Logical state (AppState.currentMode, toasts) is updated immediately so the UI and key
+ * handling react without waiting for the hardware write.
  */
 class AppSwitchService : AccessibilityService() {
 
     private lateinit var prefs: Prefs
 
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     private var lastAppliedPackage: String? = null
     private var lastAppliedMode: Mode? = null
 
+    @Volatile
     private var imePackages: Set<String> = emptySet()
+    private var imeObserver: ContentObserver? = null
 
     private var lastTextInteractionUptime: Long = 0L
+    private var lastWindowStateChangeUptime: Long = 0L
+    private var lastScrollKeyUptime: Long = 0L
 
-    private val contentCheckHandler = Handler(Looper.getMainLooper())
+    // Preferred: real mouse-wheel events through a root helper (native, smooth, no edge gestures).
+    private val wheelInjector: WheelInjector by lazy { WheelInjector(this) }
+
+    // Fallback when the wheel helper isn't available: continuous-drag scrolling (API 26+);
+    // older versions use one swipe per key.
+    private val scrollEngine: ScrollGestureEngine? by lazy {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ScrollGestureEngine(this) else null
+    }
+
+    private val appLabelCache = HashMap<String, String?>()
+
+    // Experimental: scroll a bit when the cursor / focus reaches the edge (Mouse & Keyboard modes).
+    private val edgeScroller: EdgeAutoScroller by lazy {
+        EdgeAutoScroller(this, prefs, wheelInjector) { dx, dy ->
+            // No root helper: touch-drag fallback, one small step.
+            val engine = scrollEngine
+            if (engine != null) {
+                engine.inertia = 0
+                if (dy != 0) engine.scrollVertical(dy > 0, 1)
+                else if (dx != 0) engine.scrollHorizontal(dx > 0, 1)
+            }
+        }
+    }
+
+    private val prefListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == null || key.startsWith(Prefs.EDGE_KEY_PREFIX)) {
+            mainHandler.post { edgeScroller.refresh() }
+        }
+        if (key == null || key.startsWith(Prefs.PAD_GESTURES_KEY_PREFIX)) {
+            mainHandler.post { refreshPadGestures() }
+        }
+        if (key == null || key.startsWith("scroll_")) {
+            mainHandler.post { syncTouchScroll() }
+        }
+        if (key == null || key == "mode_notification") {
+            mainHandler.post { updateModeNotification() }
+        }
+    }
+
+    // ---------- TOUCH SCROLL (Scroll wheel mode, Touch method) ----------
+    //
+    // The hardware stays in mouse mode and the root helper runs the native touch-scroll
+    // program, which grabs the trackpad and drives a virtual finger from its motion.
+
+    private var touchScrollActive = false
+
+    private fun touchScrollWanted(mode: Mode? = AppState.currentMode): Boolean =
+        mode == Mode.SCROLL_WHEEL &&
+                prefs.getEffectiveScrollSettings(AppState.currentForegroundPackage).method == ScrollMethod.TOUCH &&
+                java.io.File(touchHelperPath()).exists()
+
+    private fun touchHelperPath(): String = applicationInfo.nativeLibraryDir + "/libq25touch.so"
+
+    /** Start/stop/reconfigure touch scroll to match the current mode, app and settings. */
+    private fun syncTouchScroll() {
+        val want = touchScrollWanted()
+        if (want) {
+            val s = prefs.getEffectiveScrollSettings(AppState.currentForegroundPackage)
+            val dm = android.util.DisplayMetrics()
+            @Suppress("DEPRECATION")
+            (getSystemService(WINDOW_SERVICE) as android.view.WindowManager).defaultDisplay.getRealMetrics(dm)
+            val cfg = listOf(
+                touchHelperPath(), dm.widthPixels, dm.heightPixels,
+                String.format(java.util.Locale.US, "%.2f", s.sensitivity.touchScale),
+                if (s.horizontalEnabled) 1 else 0,
+                if (s.invertVertical) 1 else 0,
+                if (s.invertHorizontal) 1 else 0
+            ).joinToString(" ")
+            wheelInjector.setTouchScroll(cfg)
+        } else {
+            wheelInjector.setTouchScroll(null)
+        }
+        if (want != touchScrollActive) {
+            touchScrollActive = want
+            android.util.Log.i("Q25Mode", "touch scroll ${if (want) "on" else "off"}")
+            // The hardware value for Scroll wheel mode differs between methods.
+            if (AppState.currentMode == Mode.SCROLL_WHEEL) TrackpadController.requestMode(Mode.SCROLL_WHEEL)
+        }
+    }
+
+    private fun onModeChangedMain() {
+        syncTouchScroll()
+        edgeScroller.updateStrips()
+        updateModeNotification()
+    }
+
+    private fun updateModeNotification() {
+        if (!prefs.isModeNotificationEnabled()) {
+            NotificationHelper.clearModeStatus(this)
+            return
+        }
+        val mode = AppState.currentMode ?: return
+        val fg = AppState.currentForegroundPackage
+        NotificationHelper.showModeStatus(this, modeLabel(mode), fg?.let { getAppLabel(it) })
+    }
+
     private var contentCheckScheduled = false
     private val contentCheckRunnable = Runnable {
         contentCheckScheduled = false
         handleContentChangedCheck()
     }
 
-    private val textOverrideHandler = Handler(Looper.getMainLooper())
+    // Fallback foreground detection: if a TYPE_WINDOW_STATE_CHANGED event is missed or
+    // filtered out, the active window is checked after window-list changes.
+    private val foregroundVerifyRunnable = Runnable { verifyForegroundFromActiveWindow() }
+
     private var textOverrideMisses = 0
     private val textOverrideCheckRunnable = object : Runnable {
         override fun run() {
@@ -57,8 +170,8 @@ class AppSwitchService : AccessibilityService() {
                 return
             }
 
-            val recent = (SystemClock.uptimeMillis() - lastTextInteractionUptime) < 1200L
-            val stillEditing = hasFocusedTextInput() || recent
+            val recent = (SystemClock.uptimeMillis() - lastTextInteractionUptime) < TEXT_RECENT_MS
+            val stillEditing = recent || hasFocusedTextInput()
 
             if (stillEditing) {
                 textOverrideMisses = 0
@@ -71,13 +184,11 @@ class AppSwitchService : AccessibilityService() {
                 }
             }
 
-            textOverrideHandler.postDelayed(this, TEXT_OVERRIDE_CHECK_INTERVAL_MS)
+            mainHandler.postDelayed(this, TEXT_OVERRIDE_CHECK_INTERVAL_MS)
         }
     }
 
     // ---------- HOLD RUNTIME STATE ----------
-
-    private val holdHandler = Handler(Looper.getMainLooper())
 
     private data class HoldRuntimeState(
         val id: Int,
@@ -103,13 +214,47 @@ class AppSwitchService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        instance = this
         imePackages = loadImePackages()
+        registerImeObserver()
+
+        // Open the root shell now so the first real switch doesn't pay for it.
+        TrackpadController.warmUp()
+
+        prefs.registerListener(prefListener)
+        TrackpadController.procValueOverride = { mode ->
+            if (mode == Mode.SCROLL_WHEEL && touchScrollWanted(mode)) "0" else null
+        }
+        AppState.onModeChanged = { mainHandler.post { onModeChangedMain() } }
+        mainHandler.post { onModeChangedMain() }
+        edgeScroller.refresh()
+        wheelInjector.onHelperLine = { line -> onHelperLine(line) }
+        refreshPadGestures()
+
+        // Apply the right mode for whatever is already on screen (e.g. after the service
+        // was restarted), instead of waiting for the next app switch.
+        mainHandler.postDelayed(foregroundVerifyRunnable, 300L)
     }
 
     override fun onDestroy() {
+        if (instance === this) instance = null
+        AppState.onModeChanged = null
+        TrackpadController.procValueOverride = null
+        wheelInjector.setTouchScroll(null)
+        NotificationHelper.clearModeStatus(this)
+        ToastHelper.dismissOverlay()
+        try {
+            prefs.unregisterListener(prefListener)
+        } catch (_: Exception) {
+        }
+        edgeScroller.stop()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) scrollEngine?.cancel()
+        wheelInjector.stop()
         stopTextOverrideMonitor()
-        contentCheckHandler.removeCallbacks(contentCheckRunnable)
+        mainHandler.removeCallbacks(contentCheckRunnable)
+        mainHandler.removeCallbacks(foregroundVerifyRunnable)
         cancelHoldPendingRunnables()
+        unregisterImeObserver()
         keyInjectExec.shutdownNow()
         super.onDestroy()
     }
@@ -121,7 +266,7 @@ class AppSwitchService : AccessibilityService() {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 val pkg = event.packageName?.toString() ?: return
 
-                if (isImePackage(pkg)) {
+                if (isImeWindowEvent(pkg, event.className)) {
                     lastTextInteractionUptime = SystemClock.uptimeMillis()
                     val fg = AppState.currentForegroundPackage
                     if (isAutoKeyboardEnabledForPackage(fg)) {
@@ -130,13 +275,19 @@ class AppSwitchService : AccessibilityService() {
                     return
                 }
 
+                lastWindowStateChangeUptime = SystemClock.uptimeMillis()
                 handleForegroundAppChanged(pkg)
                 scheduleContentCheck()
+            }
+
+            AccessibilityEvent.TYPE_VIEW_SCROLLED -> {
+                edgeScroller.onViewScrolled()
             }
 
             AccessibilityEvent.TYPE_VIEW_FOCUSED,
             AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED,
             AccessibilityEvent.TYPE_VIEW_CLICKED -> {
+                if (event.eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED) edgeScroller.onFocusEvent()
                 handleViewFocusedForAutoKeyboard(event)
                 scheduleContentCheck()
             }
@@ -146,8 +297,13 @@ class AppSwitchService : AccessibilityService() {
                 handleTextInteraction(event)
             }
 
-            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
             AccessibilityEvent.TYPE_WINDOWS_CHANGED -> {
+                edgeScroller.onWindowsChanged()
+                if (isActiveWindowChange(event)) scheduleForegroundVerify()
+                scheduleContentCheck()
+            }
+
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
                 scheduleContentCheck()
             }
         }
@@ -155,6 +311,12 @@ class AppSwitchService : AccessibilityService() {
 
     override fun onInterrupt() {
         // No-op
+    }
+
+    // Mouse events arrive here only while edge auto-scroll observes them (Android 15+,
+    // observed = not consumed: the cursor and clicks are unaffected).
+    override fun onMotionEvent(event: android.view.MotionEvent) {
+        edgeScroller.onMouseEvent(event)
     }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
@@ -172,6 +334,8 @@ class AppSwitchService : AccessibilityService() {
             handleEndOfTextInputCheck()
             return false
         }
+
+        edgeScroller.onKeyEvent(event)
 
         if (shouldRemapMetaDpadToPlain(event)) {
             if (event.action == KeyEvent.ACTION_DOWN) {
@@ -213,20 +377,22 @@ class AppSwitchService : AccessibilityService() {
     }
 
     private fun injectPlainDpad(keyCode: Int) {
-        keyInjectExec.execute {
-            execSu("input keyevent $keyCode")
+        try {
+            keyInjectExec.execute {
+                execSu("input keyevent $keyCode")
+            }
+        } catch (_: Exception) {
+            // Executor shut down (service being destroyed).
         }
     }
 
+    // Kept as a separate one-shot su so slow `input` commands never queue in front of
+    // trackpad mode writes on the shared root shell.
     private fun execSu(cmd: String): Boolean {
         return try {
-            val p = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
+            val p = ProcessBuilder("su", "-c", cmd).redirectErrorStream(true).start()
             try {
                 p.inputStream.bufferedReader().readText()
-            } catch (_: Exception) {
-            }
-            try {
-                p.errorStream.bufferedReader().readText()
             } catch (_: Exception) {
             }
             p.waitFor() == 0
@@ -238,30 +404,254 @@ class AppSwitchService : AccessibilityService() {
     }
 
     private fun handleScrollKey(event: KeyEvent) {
+        lastScrollKeyUptime = SystemClock.uptimeMillis()
         val pkg = AppState.currentForegroundPackage
         val settings = prefs.getEffectiveScrollSettings(pkg)
         val steps = settings.sensitivity.steps
+        val notches = settings.sensitivity.wheelNotches
+        val useWheel = false
+
+        // Classic, and Touch when arrow keys still arrive (no root / helper not running yet).
+        if (settings.method == ScrollMethod.CLASSIC || settings.method == ScrollMethod.TOUCH) {
+            classicScroll(event.keyCode, settings, steps)
+            return
+        }
+
+        val isVertical = event.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
+                event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+        if (isVertical && useWheel && handleHomeScreenFlick(event.keyCode, pkg)) return
 
         when (event.keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> {
                 val scrollUp = !settings.invertVertical
-                scrollVertical(scrollUp, steps)
+                scrollVertical(scrollUp, steps, notches, useWheel)
             }
             KeyEvent.KEYCODE_DPAD_DOWN -> {
                 val scrollUp = settings.invertVertical
-                scrollVertical(scrollUp, steps)
+                scrollVertical(scrollUp, steps, notches, useWheel)
             }
             KeyEvent.KEYCODE_DPAD_LEFT -> {
                 if (settings.horizontalEnabled) {
                     val scrollLeft = !settings.invertHorizontal
-                    scrollHorizontal(scrollLeft, steps)
+                    scrollHorizontal(scrollLeft, steps, notches, useWheel)
                 }
             }
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
                 if (settings.horizontalEnabled) {
                     val scrollLeft = settings.invertHorizontal
-                    scrollHorizontal(scrollLeft, steps)
+                    scrollHorizontal(scrollLeft, steps, notches, useWheel)
                 }
+            }
+        }
+    }
+
+    /**
+     * The original scroll behaviour, unchanged from the first releases: every tick sends
+     * one fixed swipe (15% of the screen per step, 120 ms per step) through the middle of
+     * the screen. A new tick replaces the swipe still in progress, and the app's own fling
+     * takes over when the ticks stop.
+     */
+    private fun classicScroll(keyCode: Int, settings: ScrollSettings, steps: Int) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) scrollEngine?.cancel()
+        when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP -> classicVertical(!settings.invertVertical, steps)
+            KeyEvent.KEYCODE_DPAD_DOWN -> classicVertical(settings.invertVertical, steps)
+            KeyEvent.KEYCODE_DPAD_LEFT ->
+                if (settings.horizontalEnabled) classicHorizontal(!settings.invertHorizontal, steps)
+            KeyEvent.KEYCODE_DPAD_RIGHT ->
+                if (settings.horizontalEnabled) classicHorizontal(settings.invertHorizontal, steps)
+        }
+    }
+
+    private fun classicVertical(up: Boolean, steps: Int) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            val ok = performVerticalGesture(up, steps)
+            if (!ok) scrollVerticalNodeBased(up, steps)
+        } else {
+            scrollVerticalNodeBased(up, steps)
+        }
+    }
+
+    private fun classicHorizontal(left: Boolean, steps: Int) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            val ok = performHorizontalGesture(left, steps)
+            if (!ok) scrollHorizontalNodeBased(left, steps)
+        } else {
+            scrollHorizontalNodeBased(left, steps)
+        }
+    }
+
+    // ---------- HOME SCREEN FLICK SHORTCUTS ----------
+    //
+    // Launchers page sideways on vertical mouse-wheel events, so with the wheel method the
+    // home screen can't be swiped into the app drawer. When the default home app is in front
+    // and nothing vertically scrollable is on screen (i.e. the home pages, not an open
+    // drawer), a vertical trackpad flick instead acts as a shortcut: up opens the app drawer
+    // (swipe-up gesture), down opens the notification shade. One action per flick: the
+    // remaining ticks of the same burst are swallowed. Uses the physical trackpad direction,
+    // regardless of the invert settings.
+
+    private var homeFlickLastUptime = 0L
+    private var homeFlickLastKey = 0
+    private var homeFlickBurstIsShortcut = false
+
+    private var homePackageCache: String? = null
+    private var homePackageCheckedUptime = 0L
+
+    private fun handleHomeScreenFlick(keyCode: Int, pkg: String?): Boolean {
+        if (!prefs.isScrollHomeShortcutsEnabled()) return false
+
+        val now = SystemClock.uptimeMillis()
+        val sameBurst = keyCode == homeFlickLastKey && now - homeFlickLastUptime < HOME_FLICK_BURST_GAP_MS
+        homeFlickLastUptime = now
+        homeFlickLastKey = keyCode
+        if (sameBurst) return homeFlickBurstIsShortcut
+
+        homeFlickBurstIsShortcut = !pkg.isNullOrEmpty() &&
+                pkg == defaultHomePackage() &&
+                isOnHomeScreenPages()
+        if (!homeFlickBurstIsShortcut) return false
+
+        if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+            openAppDrawerBySwipe()
+        } else {
+            performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
+        }
+        return true
+    }
+
+    /** Package of the default home app, cached for a few seconds. Null if none is set. */
+    private fun defaultHomePackage(): String? {
+        val now = SystemClock.uptimeMillis()
+        if (homePackageCheckedUptime != 0L && now - homePackageCheckedUptime < HOME_PACKAGE_CACHE_MS) {
+            return homePackageCache
+        }
+        homePackageCheckedUptime = now
+        homePackageCache = try {
+            val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+            packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+                ?.activityInfo?.packageName
+                ?.takeIf { it != "android" } // the chooser: no default home app picked
+        } catch (_: Exception) {
+            null
+        }
+        return homePackageCache
+    }
+
+    /**
+     * True only when the launcher is showing its home pages: a visible workspace, no
+     * recents/overview, and nothing vertically scrollable (so an open app drawer or a
+     * scrolling widget gets normal wheel scrolling). Launcher3-based launchers (Lineage,
+     * Pixel, Nova, Lawnchair...) use the view ids "<pkg>:id/workspace" for the home pages
+     * and "<pkg>:id/overview_panel" for recents. Launchers without a workspace id never get
+     * the shortcuts, so a flick can't land on something unexpected (e.g. a swipe-up in
+     * recents would dismiss an app).
+     */
+    private fun isOnHomeScreenPages(): Boolean {
+        val root = try {
+            rootInActiveWindow
+        } catch (_: Exception) {
+            null
+        } ?: return false
+
+        var sawWorkspace = false
+        val queue: ArrayDeque<AccessibilityNodeInfo> = ArrayDeque()
+        queue.add(root)
+        var visited = 0
+        while (queue.isNotEmpty()) {
+            val node = queue.removeFirst()
+            visited++
+            if (node.isVisibleToUser) {
+                val viewId = node.viewIdResourceName.orEmpty()
+                if (viewId.endsWith(":id/overview_panel", ignoreCase = true) || isVerticalScroller(node)) {
+                    node.recycle()
+                    recycleQueue(queue)
+                    return false
+                }
+                if (viewId.endsWith(":id/workspace", ignoreCase = true)) sawWorkspace = true
+            }
+            if (visited < MAX_TREE_NODES) {
+                for (i in 0 until node.childCount) {
+                    node.getChild(i)?.let { queue.add(it) }
+                }
+            }
+            node.recycle()
+        }
+        return sawWorkspace
+    }
+
+    private fun isVerticalScroller(node: AccessibilityNodeInfo): Boolean {
+        if (!node.isScrollable) return false
+
+        // Launcher3-based home screens (Lineage, Pixel, Nova, Lawnchair...) report the
+        // horizontally paged workspace as a plain android.widget.ScrollView with id
+        // "<pkg>:id/workspace", so neither class name nor actions give it away.
+        val viewId = node.viewIdResourceName.orEmpty()
+        if (viewId.endsWith(":id/workspace", ignoreCase = true)) return false
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val ids = node.actionList.map { it.id }
+            if (ids.contains(android.R.id.accessibilityActionScrollUp) ||
+                ids.contains(android.R.id.accessibilityActionScrollDown)
+            ) return true
+            if (ids.contains(android.R.id.accessibilityActionScrollLeft) ||
+                ids.contains(android.R.id.accessibilityActionScrollRight)
+            ) return false
+        }
+
+        // No direction info: rule out horizontal pagers (launcher workspaces, view pagers).
+        val cls = node.className?.toString().orEmpty()
+        if (cls.contains("Horizontal") || cls.contains("ViewPager") ||
+            cls.contains("PagedView") || cls.contains("Workspace")
+        ) return false
+
+        val info = node.collectionInfo
+        if (info != null && info.rowCount in 0..1 && info.columnCount > 1) return false
+
+        return true
+    }
+
+    private fun openAppDrawerBySwipe() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
+        val dm = resources.displayMetrics
+        val x = dm.widthPixels / 2f
+        val h = dm.heightPixels.toFloat()
+        try {
+            dispatchGesture(buildGestureStroke(x, h * 0.70f, x, h * 0.30f, HOME_FLICK_SWIPE_MS), null, null)
+        } catch (_: Exception) {
+        }
+    }
+
+    // ---------- MODE APPLICATION ----------
+
+    /**
+     * Update the logical mode immediately and push it to hardware in the background.
+     * Callbacks run on the main thread once the write finishes. If a newer request
+     * supersedes this one before it runs, neither callback is invoked.
+     */
+    private fun applyMode(
+        target: Mode,
+        onSuccess: (() -> Unit)? = null,
+        onFailure: (() -> Unit)? = null
+    ) {
+        if (AppState.currentMode != target) {
+            android.util.Log.i("Q25Mode", "applyMode ${AppState.currentMode} -> $target fg=${AppState.currentForegroundPackage}")
+        }
+        AppState.currentMode = target
+        if (target == Mode.SCROLL_WHEEL) {
+            // Get the wheel helper running before the first scroll tick.
+            wheelInjector.ensureStarted()
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            scrollEngine?.cancel()
+        }
+        edgeScroller.updateStrips()
+        TrackpadController.requestMode(target) { ok ->
+            if (ok) {
+                NotificationHelper.clearRootError(this)
+                onSuccess?.invoke()
+            } else {
+                showRootError()
+                onFailure?.invoke()
             }
         }
     }
@@ -280,15 +670,52 @@ class AppSwitchService : AccessibilityService() {
         }
     }
 
+    // Keep the IME list current when the user enables/disables a keyboard, instead of
+    // only reading it once when the service connects.
+    private fun registerImeObserver() {
+        if (imeObserver != null) return
+        val observer = object : ContentObserver(mainHandler) {
+            override fun onChange(selfChange: Boolean) {
+                imePackages = loadImePackages()
+            }
+        }
+        try {
+            contentResolver.registerContentObserver(
+                Settings.Secure.getUriFor(Settings.Secure.ENABLED_INPUT_METHODS),
+                false,
+                observer
+            )
+            imeObserver = observer
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun unregisterImeObserver() {
+        val observer = imeObserver ?: return
+        try {
+            contentResolver.unregisterContentObserver(observer)
+        } catch (_: Exception) {
+        }
+        imeObserver = null
+    }
+
+    /**
+     * IME detection. Uses the enabled-IME list, the IME window class, and the
+     * conventional ".inputmethod" package segment.
+     *
+     * Previously any package containing "ime" or "keyboard" was treated as a keyboard,
+     * which caught ordinary apps (anything with "time", "prime", "anime", ...). Those
+     * apps never got their per-app mode applied and could trigger the text-input override.
+     */
     private fun isImePackage(pkg: String?): Boolean {
         if (pkg.isNullOrEmpty()) return false
         if (imePackages.contains(pkg)) return true
+        return pkg.contains(".inputmethod", ignoreCase = true)
+    }
 
-        if (pkg.contains("inputmethod", ignoreCase = true)) return true
-        if (pkg.contains("keyboard", ignoreCase = true)) return true
-        if (pkg.contains("ime", ignoreCase = true)) return true
-
-        return false
+    private fun isImeWindowEvent(pkg: String, className: CharSequence?): Boolean {
+        if (isImePackage(pkg)) return true
+        return className?.toString() == "android.inputmethodservice.SoftInputWindow"
     }
 
     private fun isAutoKeyboardEnabledForPackage(packageName: String?): Boolean {
@@ -298,10 +725,12 @@ class AppSwitchService : AccessibilityService() {
     private fun handleTextInteraction(event: AccessibilityEvent) {
         val fg = AppState.currentForegroundPackage
         if (!isAutoKeyboardEnabledForPackage(fg)) return
-
-        if (fg != null && prefs.getExcludedPackages().contains(fg)) return
+        if (prefs.isExcluded(fg)) return
 
         lastTextInteractionUptime = SystemClock.uptimeMillis()
+
+        // Already in the override: the monitor keeps it alive; no need to inspect the node.
+        if (AppState.textInputOverrideActive) return
 
         val src = event.source
         val isText = if (src != null) {
@@ -317,23 +746,32 @@ class AppSwitchService : AccessibilityService() {
         }
     }
 
+    // Throttle: at most one check per CONTENT_CHECK_DELAY_MS, however many events arrive.
     private fun scheduleContentCheck() {
         if (contentCheckScheduled) return
+        // While scroll-wheel scrolling is underway the list fires content-changed events
+        // nonstop; walking the view tree for each would compete with key handling on the
+        // main thread and make scrolling stutter. Text-field detection resumes right after.
+        if (AppState.currentMode == Mode.SCROLL_WHEEL &&
+            SystemClock.uptimeMillis() - lastScrollKeyUptime < SCROLL_QUIET_MS
+        ) return
         contentCheckScheduled = true
-        contentCheckHandler.removeCallbacks(contentCheckRunnable)
-        contentCheckHandler.postDelayed(contentCheckRunnable, 120L)
+        mainHandler.postDelayed(contentCheckRunnable, CONTENT_CHECK_DELAY_MS)
     }
 
     private fun handleContentChangedCheck() {
         val fg = AppState.currentForegroundPackage
 
-        if (!isAutoKeyboardEnabledForPackage(fg) || (fg != null && prefs.getExcludedPackages().contains(fg))) {
+        if (!isAutoKeyboardEnabledForPackage(fg) || prefs.isExcluded(fg)) {
             if (AppState.textInputOverrideActive) {
                 restoreModeAfterTextInput()
                 stopTextOverrideMonitor()
             }
             return
         }
+
+        // While the override is active, the monitor decides when to end it; skip the tree walk.
+        if (AppState.textInputOverrideActive) return
 
         if (hasFocusedTextInput()) {
             enterTextInputOverrideIfNeeded()
@@ -345,8 +783,7 @@ class AppSwitchService : AccessibilityService() {
 
         if (pkg == "android" || pkg == "com.android.systemui") return
 
-        val excluded = prefs.getExcludedPackages()
-        if (pkg.isNotEmpty() && excluded.contains(pkg)) {
+        if (pkg.isNotEmpty() && prefs.isExcluded(pkg)) {
             if (AppState.textInputOverrideActive) {
                 restoreModeAfterTextInput()
                 stopTextOverrideMonitor()
@@ -367,16 +804,15 @@ class AppSwitchService : AccessibilityService() {
     }
 
     private fun isTextInputNode(node: AccessibilityNodeInfo): Boolean {
+        if (node.isEditable) return true
+
         val cls = node.className?.toString().orEmpty()
         if (cls.contains("EditText", ignoreCase = true)) return true
         if (cls.contains("TextInput", ignoreCase = true)) return true
         if (cls.contains("AutoCompleteTextView", ignoreCase = true)) return true
-        if (node.isEditable) return true
 
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                if (node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_SET_TEXT }) return true
-            }
+            if (node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_SET_TEXT }) return true
         } catch (_: Exception) {
         }
 
@@ -387,11 +823,9 @@ class AppSwitchService : AccessibilityService() {
         if (AppState.textInputOverrideActive) return
 
         val fg = AppState.currentForegroundPackage
-        if (fg != null && prefs.getExcludedPackages().contains(fg)) return
+        if (prefs.isExcluded(fg)) return
 
-        val anyHoldActive = isAnyHoldActive()
-
-        val prevMode = if (anyHoldActive) {
+        val prevMode = if (isAnyHoldActive()) {
             AppState.modeBeforeHoldKey
                 ?: AppState.currentMode
                 ?: prefs.getLastKnownMode()
@@ -403,41 +837,19 @@ class AppSwitchService : AccessibilityService() {
         }
 
         AppState.modeBeforeTextInput = prevMode
-
-        if (prevMode == Mode.KEYBOARD) {
-            val desiredProc = procValueForMode(Mode.KEYBOARD)
-            val currentProc = if (desiredProc != null) TrackpadController.readValue() else null
-            if (desiredProc != null && currentProc != null && currentProc != desiredProc) {
-                val ok = TrackpadController.setModeValue(Mode.KEYBOARD)
-                if (!ok) {
-                    showRootError()
-                    AppState.modeBeforeTextInput = null
-                    AppState.textInputOverrideActive = false
-                    stopTextOverrideMonitor()
-                    return
-                }
-                NotificationHelper.clearRootError(this)
-                AppState.currentMode = Mode.KEYBOARD
-            }
-
-            AppState.textInputOverrideActive = true
-            startTextOverrideMonitor()
-            return
-        }
-
-        val ok = TrackpadController.setModeValue(Mode.KEYBOARD)
-        if (!ok) {
-            showRootError()
-            AppState.modeBeforeTextInput = null
-            AppState.textInputOverrideActive = false
-            stopTextOverrideMonitor()
-            return
-        }
-
-        NotificationHelper.clearRootError(this)
-        AppState.currentMode = Mode.KEYBOARD
         AppState.textInputOverrideActive = true
         startTextOverrideMonitor()
+
+        // requestMode skips the write if the hardware is already in keyboard mode.
+        applyMode(Mode.KEYBOARD, onFailure = {
+            // Root failed: back out of the override so we don't think we're in Keyboard.
+            if (AppState.textInputOverrideActive) {
+                AppState.textInputOverrideActive = false
+                AppState.modeBeforeTextInput = null
+                AppState.currentMode = prevMode
+                stopTextOverrideMonitor()
+            }
+        })
     }
 
     private fun restoreModeAfterTextInput() {
@@ -448,33 +860,19 @@ class AppSwitchService : AccessibilityService() {
             clearAllHoldState()
         }
 
-        val desiredProc = procValueForMode(targetMode)
-        val currentProc = if (desiredProc != null) TrackpadController.readValue() else null
-
-        val alreadyCorrect = (AppState.currentMode == targetMode) &&
-                (desiredProc == null || currentProc == null || currentProc == desiredProc)
-
-        if (!alreadyCorrect) {
-            val ok = TrackpadController.setModeValue(targetMode)
-            if (!ok) {
-                showRootError()
-            } else {
-                NotificationHelper.clearRootError(this)
-                AppState.currentMode = targetMode
-            }
-        }
-
         AppState.modeBeforeTextInput = null
         AppState.textInputOverrideActive = false
+
+        applyMode(targetMode)
     }
 
     private fun handleEndOfTextInputCheck() {
+        if (!AppState.textInputOverrideActive) return
         val fg = AppState.currentForegroundPackage
         if (!isAutoKeyboardEnabledForPackage(fg)) return
-        if (!AppState.textInputOverrideActive) return
 
-        val recent = (SystemClock.uptimeMillis() - lastTextInteractionUptime) < 1200L
-        if (!hasFocusedTextInput() && !recent) {
+        val recent = (SystemClock.uptimeMillis() - lastTextInteractionUptime) < TEXT_RECENT_MS
+        if (!recent && !hasFocusedTextInput()) {
             restoreModeAfterTextInput()
             stopTextOverrideMonitor()
         }
@@ -482,17 +880,21 @@ class AppSwitchService : AccessibilityService() {
 
     private fun startTextOverrideMonitor() {
         textOverrideMisses = 0
-        textOverrideHandler.removeCallbacks(textOverrideCheckRunnable)
-        textOverrideHandler.postDelayed(textOverrideCheckRunnable, TEXT_OVERRIDE_CHECK_INTERVAL_MS)
+        mainHandler.removeCallbacks(textOverrideCheckRunnable)
+        mainHandler.postDelayed(textOverrideCheckRunnable, TEXT_OVERRIDE_CHECK_INTERVAL_MS)
     }
 
     private fun stopTextOverrideMonitor() {
-        textOverrideHandler.removeCallbacks(textOverrideCheckRunnable)
+        mainHandler.removeCallbacks(textOverrideCheckRunnable)
         textOverrideMisses = 0
     }
 
     private fun hasFocusedTextInput(): Boolean {
-        val root = rootInActiveWindow ?: return false
+        val root = try {
+            rootInActiveWindow
+        } catch (_: Exception) {
+            null
+        } ?: return false
 
         val focused = try {
             root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
@@ -507,11 +909,14 @@ class AppSwitchService : AccessibilityService() {
             return res
         }
 
+        // Fallback walk, bounded so a huge view tree can't stall the main thread.
         val queue: ArrayDeque<AccessibilityNodeInfo> = ArrayDeque()
         queue.add(root)
+        var visited = 0
 
         while (queue.isNotEmpty()) {
             val node = queue.removeFirst()
+            visited++
 
             val focusedNow = node.isFocused || node.isAccessibilityFocused
             if (focusedNow && isTextInputNode(node)) {
@@ -520,8 +925,10 @@ class AppSwitchService : AccessibilityService() {
                 return true
             }
 
-            for (i in 0 until node.childCount) {
-                node.getChild(i)?.let { queue.add(it) }
+            if (visited < MAX_TREE_NODES) {
+                for (i in 0 until node.childCount) {
+                    node.getChild(i)?.let { queue.add(it) }
+                }
             }
 
             node.recycle()
@@ -611,16 +1018,18 @@ class AppSwitchService : AccessibilityService() {
         requireDouble: Boolean,
         toastPrefix: String
     ) {
-        if (holdMode == HoldMode.DISABLED) return
-        if (!allowInText && hasFocusedTextInput()) return
-
         if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount > 0) return
 
         val now = SystemClock.uptimeMillis()
 
         when (event.action) {
             KeyEvent.ACTION_DOWN -> {
+                if (holdMode == HoldMode.DISABLED) return
                 if (state.active && state.keyDown == event.keyCode) return
+                // Text-field gating only applies to *starting* a hold. It used to run on key-up
+                // too, so if focus moved into a text field mid-hold the release was ignored and
+                // the hold got stuck.
+                if (!allowInText && hasFocusedTextInput()) return
 
                 if (requireDouble) {
                     val within = state.waitingSecondPress && (now - state.lastUpUptime) <= DOUBLE_PRESS_TIMEOUT_MS
@@ -724,11 +1133,11 @@ class AppSwitchService : AccessibilityService() {
         }
 
         hold1.pendingSingleHoldRunnable = r
-        holdHandler.postDelayed(r, SINGLE_HOLD_ACTIVATE_DELAY_MS)
+        mainHandler.postDelayed(r, SINGLE_HOLD_ACTIVATE_DELAY_MS)
     }
 
     private fun cancelPendingSingleHold(state: HoldRuntimeState) {
-        state.pendingSingleHoldRunnable?.let { holdHandler.removeCallbacks(it) }
+        state.pendingSingleHoldRunnable?.let { mainHandler.removeCallbacks(it) }
         state.pendingSingleHoldRunnable = null
     }
 
@@ -788,13 +1197,6 @@ class AppSwitchService : AccessibilityService() {
         AppState.hold2FirstTapUpUptime = hold2.lastUpUptime
     }
 
-    private fun procValueForMode(mode: Mode): String? {
-        return when (mode) {
-            Mode.MOUSE -> "0"
-            Mode.KEYBOARD, Mode.SCROLL_WHEEL -> "1"
-            Mode.FOLLOW_SYSTEM -> null
-        }
-    }
 
     private fun startHold(state: HoldRuntimeState, fg: String?, keyCode: Int, holdMode: HoldMode, toastPrefix: String) {
         val baseMode =
@@ -818,20 +1220,14 @@ class AppSwitchService : AccessibilityService() {
 
         syncHoldStateToAppState()
 
-        if (AppState.currentMode == target) {
-            val desiredProc = procValueForMode(target)
-            val currentProc = if (desiredProc != null) TrackpadController.readValue() else null
-            if (desiredProc == null || currentProc == null || currentProc == desiredProc) {
-                if (prefs.isToastHoldKeyEnabled()) {
-                    ToastHelper.show(this, "$toastPrefix: ${modeLabel(target)}")
-                }
-                return
+        val showToast = prefs.isToastHoldKeyEnabled()
+        applyMode(target, onSuccess = {
+            if (showToast && state.active && state.targetMode == target) {
+                ToastHelper.show(this, "$toastPrefix: ${modeLabel(target)}")
             }
-        }
-
-        val ok = TrackpadController.setModeValue(target)
-        if (!ok) {
-            showRootError()
+        }, onFailure = {
+            // Root failed: undo this hold if it's still the one we started.
+            if (!state.active || state.targetMode != target) return@applyMode
 
             state.active = false
             state.keyDown = null
@@ -844,16 +1240,9 @@ class AppSwitchService : AccessibilityService() {
                 lastActivatedHoldSlot = 0
             }
 
+            AppState.currentMode = baseMode
             syncHoldStateToAppState()
-            return
-        }
-
-        NotificationHelper.clearRootError(this)
-        AppState.currentMode = target
-
-        if (prefs.isToastHoldKeyEnabled()) {
-            ToastHelper.show(this, "$toastPrefix: ${modeLabel(target)}")
-        }
+        })
     }
 
     private fun endHold(state: HoldRuntimeState, fg: String?) {
@@ -887,31 +1276,14 @@ class AppSwitchService : AccessibilityService() {
             AppState.modeBeforeHoldKey = null
             AppState.modeBeforeHold1 = null
             AppState.modeBeforeHold2 = null
-        }
 
-        if (!hold1.active && !hold2.active) {
             if (AppState.hold1KeyCodeDown == releasedKey) AppState.hold1KeyCodeDown = null
             if (AppState.hold2KeyCodeDown == releasedKey) AppState.hold2KeyCodeDown = null
         }
 
         syncHoldStateToAppState()
 
-        if (AppState.currentMode == restoreTarget) {
-            val desiredProc = procValueForMode(restoreTarget)
-            val currentProc = if (desiredProc != null) TrackpadController.readValue() else null
-            if (desiredProc == null || currentProc == null || currentProc == desiredProc) {
-                return
-            }
-        }
-
-        val ok = TrackpadController.setModeValue(restoreTarget)
-        if (!ok) {
-            showRootError()
-            return
-        }
-
-        NotificationHelper.clearRootError(this)
-        AppState.currentMode = restoreTarget
+        applyMode(restoreTarget)
     }
 
     private fun computeHoldTargetMode(base: Mode, holdMode: HoldMode): Mode? {
@@ -932,9 +1304,92 @@ class AppSwitchService : AccessibilityService() {
         }
     }
 
+    // ---------- TRACKPAD TAP GESTURES (experimental) ----------
+
+    private fun refreshPadGestures() {
+        val on = prefs.isPadGesturesUsedAnywhere()
+        wheelInjector.setTapDetection(on)
+        AppState.padTapStatus = if (on) "Starting tap detection (needs root)…" else "Tap gestures are off"
+    }
+
+    private fun onHelperLine(line: String) {
+        when {
+            line.startsWith("pad ") -> {
+                val devs = line.removePrefix("pad ").trim()
+                AppState.padTapStatus = if (devs == "no-device") "No trackpad input device found"
+                else "Listening for taps on $devs"
+                android.util.Log.i("Q25PadTap", "helper: $line")
+            }
+            line.startsWith("touch ") -> android.util.Log.i("Q25Touch", "helper: $line")
+            line.startsWith("tap ") -> {
+                val n = line.removePrefix("tap ").trim().toIntOrNull() ?: return
+                handlePadTaps(n)
+            }
+        }
+    }
+
+    private fun handlePadTaps(taps: Int) {
+        val fg = AppState.currentForegroundPackage
+        val settings = prefs.getEffectivePadGestureSettings(fg)
+        android.util.Log.i("Q25PadTap", "taps=$taps pkg=$fg enabled=${settings.enabled}")
+        if (!settings.enabled) return
+        // Two quick double taps can merge into one 4-tap sequence: run the double tap twice.
+        val action = when (taps) {
+            2, 4 -> settings.doubleTap
+            3 -> settings.tripleTap
+            else -> return
+        }
+        val repeats = if (taps == 4) 2 else 1
+        AppState.padTapStatus = "Last gesture: $taps taps → ${action.label}"
+
+        // Always announce the gesture, so automation apps (Tasker, MacroDroid…) can react.
+        try {
+            sendBroadcast(Intent(PadTapAction.BROADCAST_ACTION).apply {
+                putExtra(PadTapAction.EXTRA_TAPS, taps)
+                putExtra(PadTapAction.EXTRA_PACKAGE, fg)
+            })
+        } catch (_: Exception) {
+        }
+
+        repeat(repeats) { performPadTapAction(action) }
+    }
+
+    private fun performPadTapAction(action: PadTapAction) {
+        when (action) {
+            PadTapAction.NONE -> Unit
+            PadTapAction.QUICK_TOGGLE -> {
+                val next = QuickToggle.perform(this)
+                edgeScroller.updateStrips()
+                if (next == Mode.SCROLL_WHEEL) wheelInjector.ensureStarted()
+                else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) scrollEngine?.cancel()
+            }
+            PadTapAction.CLICK -> wheelInjector.click(1)
+            PadTapAction.DOUBLE_CLICK -> wheelInjector.click(2)
+            PadTapAction.TRIPLE_CLICK -> wheelInjector.click(3)
+            PadTapAction.RIGHT_CLICK -> wheelInjector.click(0)
+            PadTapAction.BACK -> performGlobalAction(GLOBAL_ACTION_BACK)
+            PadTapAction.HOME -> performGlobalAction(GLOBAL_ACTION_HOME)
+            PadTapAction.RECENTS -> performGlobalAction(GLOBAL_ACTION_RECENTS)
+            PadTapAction.NOTIFICATIONS -> performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
+            PadTapAction.SCREENSHOT -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT)
+            }
+            PadTapAction.KEY_F9, PadTapAction.KEY_F10,
+            PadTapAction.KEY_F11, PadTapAction.KEY_F12 -> wheelInjector.key(action.keyCode)
+        }
+    }
+
     // ---------- SCROLL HELPERS ----------
 
-    private fun scrollVertical(up: Boolean, steps: Int) {
+    private fun scrollVertical(up: Boolean, steps: Int, notches: Float, useWheel: Boolean) {
+        // "up" moves the content like a finger dragged up, i.e. reveals what's below:
+        // that's a wheel scroll down (negative VSCROLL).
+        if (useWheel && wheelScroll(v = if (up) -notches else notches, h = 0f)) return
+        scrollEngine?.let {
+            it.inertia = prefs.getScrollInertia().level
+            it.scrollVertical(up, steps)
+            return
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             val ok = performVerticalGesture(up, steps)
             if (!ok) scrollVerticalNodeBased(up, steps)
@@ -943,12 +1398,108 @@ class AppSwitchService : AccessibilityService() {
         }
     }
 
-    private fun scrollHorizontal(left: Boolean, steps: Int) {
+    private fun scrollHorizontal(left: Boolean, steps: Int, notches: Float, useWheel: Boolean) {
+        // "left" reveals content to the right: positive HSCROLL.
+        if (useWheel && wheelScroll(v = 0f, h = if (left) notches else -notches)) return
+        scrollEngine?.let {
+            it.inertia = prefs.getScrollInertia().level
+            it.scrollHorizontal(left, steps)
+            return
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             val ok = performHorizontalGesture(left, steps)
             if (!ok) scrollHorizontalNodeBased(left, steps)
         } else {
             scrollHorizontalNodeBased(left, steps)
+        }
+    }
+
+    // ---- Wheel scrolling: acceleration + target point ----
+
+    private var lastWheelTickUptime = 0L
+    private var lastWheelDirection = 0  // sign of (v + h)
+    private var wheelAccel = 1f
+    private var wheelTargetX = 0f
+    private var wheelTargetY = 0f
+
+    private fun wheelScroll(v: Float, h: Float): Boolean {
+        val now = SystemClock.uptimeMillis()
+        val dt = now - lastWheelTickUptime
+        val dir = if (v + h > 0) 1 else -1
+        val newBurst = dt > WHEEL_BURST_GAP_MS || dir != lastWheelDirection
+
+        // Acceleration: ticks that follow each other quickly in the same direction scroll
+        // progressively further; any pause or direction change resets to 1x.
+        wheelAccel = when {
+            !prefs.isScrollAccelerationEnabled() -> 1f
+            !newBurst && dt < WHEEL_ACCEL_WINDOW_MS -> (wheelAccel * WHEEL_ACCEL_GROWTH).coerceAtMost(WHEEL_ACCEL_MAX)
+            else -> 1f
+        }
+
+        // Aim at the scrollable view in the focused window, picked once per burst.
+        if (newBurst || (wheelTargetX == 0f && wheelTargetY == 0f)) {
+            updateWheelTarget()
+        }
+
+        lastWheelTickUptime = now
+        lastWheelDirection = dir
+
+        return wheelInjector.scroll(
+            wheelTargetX, wheelTargetY,
+            v * wheelAccel, h * wheelAccel,
+            prefs.getScrollSmoothness().ease,
+            prefs.getScrollInertia().level
+        )
+    }
+
+    /**
+     * Wheel events go to whatever window is under the given point, so pick a point inside
+     * the focused window: the centre of its first scrollable view if there is one, else the
+     * centre of the window, else the centre of the screen.
+     */
+    private fun updateWheelTarget() {
+        val dm = resources.displayMetrics
+        wheelTargetX = dm.widthPixels / 2f
+        wheelTargetY = dm.heightPixels / 2f
+
+        val root = try {
+            rootInActiveWindow
+        } catch (_: Exception) {
+            null
+        } ?: return
+
+        val rect = android.graphics.Rect()
+        try {
+            root.getBoundsInScreen(rect)
+            if (!rect.isEmpty) {
+                wheelTargetX = rect.exactCenterX()
+                wheelTargetY = rect.exactCenterY()
+            }
+        } catch (_: Exception) {
+        }
+
+        val queue: ArrayDeque<AccessibilityNodeInfo> = ArrayDeque()
+        queue.add(root)
+        var visited = 0
+        while (queue.isNotEmpty()) {
+            val node = queue.removeFirst()
+            visited++
+            if (node.isScrollable && node.isVisibleToUser) {
+                node.getBoundsInScreen(rect)
+                if (!rect.isEmpty) {
+                    wheelTargetX = rect.exactCenterX()
+                    wheelTargetY = rect.exactCenterY()
+                }
+                node.recycle()
+                recycleQueue(queue)
+                return
+            }
+            if (visited < MAX_TREE_NODES) {
+                for (i in 0 until node.childCount) {
+                    node.getChild(i)?.let { queue.add(it) }
+                }
+            }
+            node.recycle()
         }
     }
 
@@ -1058,31 +1609,58 @@ class AppSwitchService : AccessibilityService() {
         return null
     }
 
+
     // ---------- APP SWITCH / MODE LOGIC ----------
 
-    private fun handleForegroundAppChanged(packageName: String) {
-        if (packageName == this.packageName) return
-        if (packageName == "android" || packageName == "com.android.systemui") return
-        if (isImePackage(packageName)) return
+    private fun isIgnoredForegroundPackage(pkg: String): Boolean {
+        if (pkg == packageName) return true
+        if (pkg == "android" || pkg == "com.android.systemui") return true
+        if (isImePackage(pkg)) return true
+        return prefs.isExcluded(pkg)
+    }
 
-        val excluded = prefs.getExcludedPackages()
-        if (excluded.contains(packageName)) return
+    private fun handleForegroundAppChanged(packageName: String) {
+        if (isIgnoredForegroundPackage(packageName)) return
+
+        // After a manual switch (Quick Toggle, tap gesture) for the app in front, a stray
+        // window event from another package (e.g. a launcher reacting to our overlay
+        // windows) must not undo it: only accept it if that app's window really has focus.
+        val override = AppState.manualOverrideForPackage
+        if (override != null && override != packageName &&
+            override == AppState.currentForegroundPackage
+        ) {
+            val focused = focusedAppPackage()
+            if (focused == override) {
+                android.util.Log.i("Q25Mode", "ignored window event from $packageName; $override still focused")
+                return
+            }
+        }
 
         val prevFg = AppState.currentForegroundPackage
+        if (prevFg != packageName) {
+            android.util.Log.i("Q25Mode", "foreground $prevFg -> $packageName")
+            // Per-app scroll method / notification text may differ for the new app.
+            mainHandler.post {
+                syncTouchScroll()
+                updateModeNotification()
+            }
+        }
         AppState.currentForegroundPackage = packageName
+        val appChanged = prevFg != null && prevFg != packageName
+        if (appChanged) edgeScroller.onWindowsChanged()
 
         val overridePkg = AppState.manualOverrideForPackage
         if (overridePkg != null && overridePkg != packageName) {
             AppState.manualOverrideForPackage = null
         }
 
-        if (AppState.textInputOverrideActive && prevFg != null && prevFg != packageName) {
+        if (AppState.textInputOverrideActive && appChanged) {
             AppState.textInputOverrideActive = false
             AppState.modeBeforeTextInput = null
             stopTextOverrideMonitor()
         }
 
-        if ((hold1.active || hold2.active) && prevFg != null && prevFg != packageName) {
+        if ((hold1.active || hold2.active) && appChanged) {
             clearAllHoldState()
         }
 
@@ -1094,46 +1672,121 @@ class AppSwitchService : AccessibilityService() {
             Mode.FOLLOW_SYSTEM, null -> prefs.getSystemDefaultMode() to true
         }
 
+        // Repeat events from the same app (new activity, dialog, etc.) with nothing to change.
+        if (lastAppliedPackage == packageName && lastAppliedMode == effectiveMode &&
+            AppState.currentMode == effectiveMode
+        ) return
+
         val currentMode = AppState.currentMode
-        if (isDefault && currentMode != null && currentMode == effectiveMode) {
-            lastAppliedPackage = packageName
-            lastAppliedMode = effectiveMode
+        lastAppliedPackage = packageName
+        lastAppliedMode = effectiveMode
+
+        val onFailure: () -> Unit = {
+            // Forget what we "applied" so the next event for this app retries.
+            if (lastAppliedPackage == packageName) {
+                lastAppliedPackage = null
+                lastAppliedMode = null
+            }
+        }
+
+        if (isDefault && currentMode == effectiveMode) {
+            // Logical mode already matches: no toast, but still make sure the hardware agrees
+            // (it may have been changed outside the app). This is a cheap read in the background.
+            applyMode(effectiveMode, onFailure = onFailure)
             return
         }
 
-        if (lastAppliedPackage == packageName && lastAppliedMode == effectiveMode) return
-
-        val ok = TrackpadController.setModeValue(effectiveMode)
-        val appLabel = getAppLabel(packageName)
-
-        if (!ok) {
-            showRootError()
-            return
-        }
-
-        NotificationHelper.clearRootError(this)
-
-        val showPerAppToast = prefs.isToastPerAppEnabled()
-        val showDefaultToast = prefs.isToastDefaultModeEnabled()
+        prefs.setLastKnownMode(effectiveMode)
 
         val message: String? = when {
-            isDefault && showDefaultToast -> "Switching to default mode! (${modeLabel(effectiveMode)})"
-            !isDefault && showPerAppToast -> {
+            isDefault && prefs.isToastDefaultModeEnabled() ->
+                "Switching to default mode! (${modeLabel(effectiveMode)})"
+            !isDefault && prefs.isToastPerAppEnabled() -> {
+                val appLabel = getAppLabel(packageName)
                 if (appLabel != null) "Switching to ${modeLabel(effectiveMode)} Mode for $appLabel!"
                 else "Switching to ${modeLabel(effectiveMode)} Mode!"
             }
             else -> null
         }
 
-        if (message != null) {
-            ToastHelper.show(this, message)
+        // The toast is shown once the hardware write succeeds (a few ms with the persistent
+        // root shell), so it never claims a switch that didn't happen. If the user has already
+        // moved on to another app, the superseded request's toast is dropped.
+        applyMode(effectiveMode, onSuccess = {
+            if (message != null && AppState.currentForegroundPackage == packageName) {
+                ToastHelper.show(this, message)
+            }
+        }, onFailure = onFailure)
+    }
+
+    private fun isActiveWindowChange(event: AccessibilityEvent): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return true
+        val changes = event.windowChanges
+        return (changes and (AccessibilityEvent.WINDOWS_CHANGE_ACTIVE or AccessibilityEvent.WINDOWS_CHANGE_FOCUSED)) != 0
+    }
+
+    private fun scheduleForegroundVerify() {
+        mainHandler.removeCallbacks(foregroundVerifyRunnable)
+        mainHandler.postDelayed(foregroundVerifyRunnable, FOREGROUND_VERIFY_DELAY_MS)
+    }
+
+    /**
+     * Fallback for missed/filtered TYPE_WINDOW_STATE_CHANGED events: look at the active
+     * window and switch if it belongs to a different app than the one we think is in front.
+     */
+    private fun verifyForegroundFromActiveWindow() {
+        // A real window-state event just arrived; it is more reliable than the window list,
+        // which can briefly lag behind during transitions.
+        val sinceStateChange = SystemClock.uptimeMillis() - lastWindowStateChangeUptime
+        if (sinceStateChange < FOREGROUND_VERIFY_DELAY_MS) {
+            mainHandler.postDelayed(foregroundVerifyRunnable, FOREGROUND_VERIFY_DELAY_MS - sinceStateChange)
+            return
         }
 
-        lastAppliedPackage = packageName
-        lastAppliedMode = effectiveMode
-        AppState.currentMode = effectiveMode
+        // Prefer the focused app window: the "active" window can be one of our own
+        // overlays or a system window while the cursor hovers over it.
+        val pkg = focusedAppPackage() ?: run {
+            val root = try {
+                rootInActiveWindow
+            } catch (_: Exception) {
+                null
+            } ?: return
 
-        prefs.setLastKnownMode(effectiveMode)
+            try {
+                root.packageName?.toString()
+            } catch (_: Exception) {
+                null
+            } finally {
+                root.recycle()
+            }
+        }
+
+        if (pkg.isNullOrEmpty() || pkg == AppState.currentForegroundPackage) return
+        android.util.Log.i("Q25Mode", "foreground verify: ${AppState.currentForegroundPackage} -> $pkg")
+        handleForegroundAppChanged(pkg)
+    }
+
+    /** Package of the focused (else active) application window, or null if unknown. */
+    private fun focusedAppPackage(): String? {
+        val list = try {
+            windows
+        } catch (_: Exception) {
+            null
+        } ?: return null
+        val apps = list.filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
+        val w = apps.firstOrNull { it.isFocused } ?: apps.firstOrNull { it.isActive } ?: return null
+        val root = try {
+            w.root
+        } catch (_: Exception) {
+            null
+        } ?: return null
+        return try {
+            root.packageName?.toString()
+        } catch (_: Exception) {
+            null
+        } finally {
+            root.recycle()
+        }
     }
 
     private fun getEffectiveModeForPackage(packageName: String?): Mode {
@@ -1154,13 +1807,17 @@ class AppSwitchService : AccessibilityService() {
     }
 
     private fun getAppLabel(packageName: String): String? {
-        return try {
+        if (appLabelCache.containsKey(packageName)) return appLabelCache[packageName]
+        val label = try {
             val pm = packageManager
             val appInfo = pm.getApplicationInfo(packageName, 0)
             pm.getApplicationLabel(appInfo).toString()
         } catch (_: Exception) {
             null
         }
+        if (appLabelCache.size >= APP_LABEL_CACHE_MAX) appLabelCache.clear()
+        appLabelCache[packageName] = label
+        return label
     }
 
     private fun showRootError() {
@@ -1171,7 +1828,25 @@ class AppSwitchService : AccessibilityService() {
     }
 
     companion object {
+        /** The running service, for overlay toasts. Main thread only. */
+        @Volatile
+        var instance: AppSwitchService? = null
+            private set
+
         private const val TEXT_OVERRIDE_CHECK_INTERVAL_MS = 350L
+        private const val TEXT_RECENT_MS = 1200L
+        private const val CONTENT_CHECK_DELAY_MS = 120L
+        private const val SCROLL_QUIET_MS = 300L
+        private const val WHEEL_BURST_GAP_MS = 300L
+        private const val HOME_FLICK_BURST_GAP_MS = 400L
+        private const val HOME_PACKAGE_CACHE_MS = 5000L
+        private const val HOME_FLICK_SWIPE_MS = 120L
+        private const val WHEEL_ACCEL_WINDOW_MS = 120L
+        private const val WHEEL_ACCEL_GROWTH = 1.3f
+        private const val WHEEL_ACCEL_MAX = 3.0f
+        private const val FOREGROUND_VERIFY_DELAY_MS = 250L
+        private const val MAX_TREE_NODES = 300
+        private const val APP_LABEL_CACHE_MAX = 64
         private const val DOUBLE_PRESS_TIMEOUT_MS = 320L
         private const val SINGLE_HOLD_ACTIVATE_DELAY_MS = 120L
     }

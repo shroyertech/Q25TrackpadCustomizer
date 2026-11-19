@@ -11,11 +11,27 @@ object AppState {
     @Volatile
     var manualOverrideForPackage: String? = null
 
+    /** Called (on whatever thread set it) whenever [currentMode] changes. */
+    @Volatile
+    var onModeChanged: (() -> Unit)? = null
+
     @Volatile
     var currentMode: Mode? = null
+        set(value) {
+            val changed = field != value
+            field = value
+            if (changed) onModeChanged?.invoke()
+        }
 
     @Volatile
     var rootErrorShown: Boolean = false
+
+    // Diagnostics for experimental features, shown in Settings.
+    @Volatile
+    var edgeScrollStatus: String = "Accessibility service not running"
+
+    @Volatile
+    var padTapStatus: String = "Accessibility service not running"
 
     // ---- Text-input override ----
 

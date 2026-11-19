@@ -96,11 +96,34 @@ class AppListAdapter(
         }
     }
 
+    /** Each section of the app settings dialog opens/closes when its header is tapped. */
+    private fun setupCollapsibleSections(root: View) {
+        val sections = listOf(
+            R.id.appSecHdrQuickToggle to R.id.appSecBodyQuickToggle,
+            R.id.appSecHdrHold1 to R.id.appSecBodyHold1,
+            R.id.appSecHdrHold2 to R.id.appSecBodyHold2,
+            R.id.appSecHdrScroll to R.id.appSecBodyScroll,
+            R.id.appSecHdrExperimental to R.id.appSecBodyExperimental,
+            R.id.appSecHdrAutoKeyboard to R.id.appSecBodyAutoKeyboard
+        )
+        for ((hdrId, bodyId) in sections) {
+            val hdr = root.findViewById<TextView>(hdrId)
+            val body = root.findViewById<View>(bodyId)
+            val title = hdr.text.toString().removePrefix("▸").trim()
+            hdr.setOnClickListener {
+                val open = body.visibility != View.VISIBLE
+                body.visibility = if (open) View.VISIBLE else View.GONE
+                hdr.text = (if (open) "▾  " else "▸  ") + title
+            }
+        }
+    }
+
     private fun showAppSettingsDialog(app: AppItem) {
         val dialogView = LayoutInflater.from(context)
             .inflate(R.layout.dialog_app_scroll_settings, null)
 
         val tvTitle = dialogView.findViewById<TextView>(R.id.tvScrollDialogTitle)
+        setupCollapsibleSections(dialogView)
 
         // Quick Toggle (per-app)
         val checkQtUseGlobal = dialogView.findViewById<CheckBox>(R.id.checkAppQuickToggleUseGlobal)
@@ -111,12 +134,24 @@ class AppListAdapter(
         // Scroll controls
         val tvScrollSensitivityLabel = dialogView.findViewById<TextView>(R.id.tvScrollSensitivityLabel)
         val spinnerSens = dialogView.findViewById<Spinner>(R.id.spinnerAppScrollSensitivity)
+        val tvScrollMethodLabel = dialogView.findViewById<TextView>(R.id.tvAppScrollMethodLabel)
+        val spinnerMethod = dialogView.findViewById<Spinner>(R.id.spinnerAppScrollMethod)
         val checkHorizontal = dialogView.findViewById<CheckBox>(R.id.checkAppScrollHorizontal)
         val checkInvertV = dialogView.findViewById<CheckBox>(R.id.checkAppScrollInvertVertical)
         val checkInvertH = dialogView.findViewById<CheckBox>(R.id.checkAppScrollInvertHorizontal)
 
         // Auto keyboard
         val checkAutoKeyboard = dialogView.findViewById<CheckBox>(R.id.checkAppAutoKeyboard)
+
+        // Experimental
+        val checkEdge = dialogView.findViewById<CheckBox>(R.id.checkAppEdgeScroll)
+        val checkEdgeUp = dialogView.findViewById<CheckBox>(R.id.checkAppEdgeUp)
+        val checkEdgeDown = dialogView.findViewById<CheckBox>(R.id.checkAppEdgeDown)
+        val checkEdgeLeft = dialogView.findViewById<CheckBox>(R.id.checkAppEdgeLeft)
+        val checkEdgeRight = dialogView.findViewById<CheckBox>(R.id.checkAppEdgeRight)
+        val checkPadGestures = dialogView.findViewById<CheckBox>(R.id.checkAppPadGestures)
+        val spinnerPadDouble = dialogView.findViewById<Spinner>(R.id.spinnerAppPadDoubleTap)
+        val spinnerPadTriple = dialogView.findViewById<Spinner>(R.id.spinnerAppPadTripleTap)
 
         // Primary Hold
         val spinnerHold1Mode = dialogView.findViewById<Spinner>(R.id.spinnerAppHoldMode)
@@ -249,8 +284,26 @@ class AppListAdapter(
         }
         spinnerSens.adapter = sensAdapter
 
+        val globalMethod = prefs.getGlobalScrollSettings().method
+        val methodLabelOf = mapOf(
+            ScrollMethod.CLASSIC to "Classic (original swipes)",
+            ScrollMethod.TOUCH to "Touch (follows your finger, needs root)"
+        )
+        val methodOptions = listOf(null, ScrollMethod.CLASSIC, ScrollMethod.TOUCH)
+        val methodLabels = methodOptions.map { m ->
+            if (m == null) "Use global (${methodLabelOf[globalMethod]})" else methodLabelOf.getValue(m)
+        }
+        spinnerMethod.adapter = ArrayAdapter(
+            context,
+            android.R.layout.simple_spinner_item,
+            methodLabels
+        ).apply {
+            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+
         val effectiveScroll = prefs.getEffectiveScrollSettings(app.packageName)
         spinnerSens.setSelection(sensOptions.indexOf(effectiveScroll.sensitivity).coerceAtLeast(0), false)
+        spinnerMethod.setSelection(methodOptions.indexOf(prefs.getAppScrollMethodOverride(app.packageName)).coerceAtLeast(0), false)
         checkHorizontal.isChecked = effectiveScroll.horizontalEnabled
         checkInvertV.isChecked = effectiveScroll.invertVertical
         checkInvertH.isChecked = effectiveScroll.invertHorizontal
@@ -258,12 +311,58 @@ class AppListAdapter(
         val scrollVis = if (isScrollEffective) View.VISIBLE else View.GONE
         tvScrollSensitivityLabel.visibility = scrollVis
         spinnerSens.visibility = scrollVis
+        tvScrollMethodLabel.visibility = scrollVis
+        spinnerMethod.visibility = scrollVis
         checkHorizontal.visibility = scrollVis
         checkInvertV.visibility = scrollVis
         checkInvertH.visibility = scrollVis
 
         // ----- Auto keyboard -----
         checkAutoKeyboard.isChecked = prefs.isEffectiveAutoKeyboardForTextEnabled(app.packageName)
+
+        // ----- Experimental: edge auto-scroll + double-tap toggle -----
+        val edge = prefs.getEffectiveEdgeScrollSettings(app.packageName)
+        checkEdge.isChecked = edge.enabled
+        checkEdgeUp.isChecked = edge.up
+        checkEdgeDown.isChecked = edge.down
+        checkEdgeLeft.isChecked = edge.left
+        checkEdgeRight.isChecked = edge.right
+        val edgeDirs = listOf(checkEdgeUp, checkEdgeDown, checkEdgeLeft, checkEdgeRight)
+        fun updateEdgeDirsState() {
+            val on = checkEdge.isChecked
+            for (c in edgeDirs) {
+                c.isEnabled = on
+                c.alpha = if (on) 1f else 0.5f
+            }
+        }
+        updateEdgeDirsState()
+        checkEdge.setOnCheckedChangeListener { _, _ -> updateEdgeDirsState() }
+        val padGlobal = prefs.getGlobalPadGestureSettings()
+        checkPadGestures.isChecked = prefs.getEffectivePadGestureSettings(app.packageName).enabled
+        // Entry 0 = follow global; then every action.
+        val padActions = PadTapAction.values().toList()
+        fun padAdapter(global: PadTapAction) = ArrayAdapter(
+            context,
+            android.R.layout.simple_spinner_item,
+            listOf("Use global (${global.label})") + padActions.map { it.label }
+        ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        spinnerPadDouble.adapter = padAdapter(padGlobal.doubleTap)
+        spinnerPadTriple.adapter = padAdapter(padGlobal.tripleTap)
+        spinnerPadDouble.setSelection(
+            prefs.getAppPadTapActionOverride(app.packageName, 2)?.let { padActions.indexOf(it) + 1 } ?: 0, false
+        )
+        spinnerPadTriple.setSelection(
+            prefs.getAppPadTapActionOverride(app.packageName, 3)?.let { padActions.indexOf(it) + 1 } ?: 0, false
+        )
+        fun updatePadState() {
+            val on = checkPadGestures.isChecked
+            for (v in listOf(spinnerPadDouble, spinnerPadTriple)) {
+                v.isEnabled = on
+                v.alpha = if (on) 1f else 0.5f
+            }
+        }
+        updatePadState()
+        checkPadGestures.setOnCheckedChangeListener { _, _ -> updatePadState() }
 
         // ----- Hold mode adapters -----
         val holdModeAdapter = ArrayAdapter(
@@ -503,10 +602,26 @@ class AppListAdapter(
                 if (isScrollEffective) {
                     val selSens = sensOptions[spinnerSens.selectedItemPosition]
                     prefs.setAppScrollSensitivity(app.packageName, selSens)
+                    prefs.setAppScrollMethod(app.packageName, methodOptions[spinnerMethod.selectedItemPosition])
                     prefs.setAppScrollHorizontalEnabled(app.packageName, checkHorizontal.isChecked)
                     prefs.setAppScrollInvertVertical(app.packageName, checkInvertV.isChecked)
                     prefs.setAppScrollInvertHorizontal(app.packageName, checkInvertH.isChecked)
                 }
+
+                prefs.setAppEdgeScroll(
+                    app.packageName,
+                    enabled = checkEdge.isChecked,
+                    up = checkEdgeUp.isChecked,
+                    down = checkEdgeDown.isChecked,
+                    left = checkEdgeLeft.isChecked,
+                    right = checkEdgeRight.isChecked
+                )
+                prefs.setAppPadGestures(
+                    app.packageName,
+                    enabled = checkPadGestures.isChecked,
+                    doubleTap = spinnerPadDouble.selectedItemPosition.let { if (it <= 0) null else padActions[it - 1] },
+                    tripleTap = spinnerPadTriple.selectedItemPosition.let { if (it <= 0) null else padActions[it - 1] }
+                )
 
                 val desiredAuto = checkAutoKeyboard.isChecked
                 val globalAuto = prefs.isGlobalAutoKeyboardForTextEnabled()

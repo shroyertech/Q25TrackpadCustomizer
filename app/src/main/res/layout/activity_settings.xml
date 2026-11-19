@@ -1,17 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/scrollSettingsRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fillViewport="true">
-
     <LinearLayout
         android:id="@+id/layoutSettingsRoot"
         android:orientation="vertical"
         android:padding="16dp"
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
-
         <!-- Title + version -->
         <LinearLayout
             android:layout_width="match_parent"
@@ -19,7 +18,6 @@
             android:orientation="horizontal"
             android:gravity="center_vertical"
             android:layout_marginBottom="2dp">
-
             <TextView
                 android:id="@+id/tvSettingsTitle"
                 android:layout_width="0dp"
@@ -28,7 +26,6 @@
                 android:text="Settings"
                 android:textStyle="bold"
                 android:textSize="18sp" />
-
             <TextView
                 android:id="@+id/tvSettingsVersion"
                 android:layout_width="wrap_content"
@@ -37,547 +34,1003 @@
                 android:textSize="12sp"
                 android:textColor="?android:attr/textColorSecondary" />
         </LinearLayout>
-
-        <!-- Initial Setup -->
-        <TextView
-            android:id="@+id/tvInitialSetupLabel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Initial setup"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:layout_marginTop="6dp"
-            android:layout_marginBottom="4dp" />
-
-        <TextView
-            android:id="@+id/tvInitialSetupSubtitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Use these if Root or the Accessibility Service isn’t enabled yet."
-            android:textSize="12sp"
-            android:textColor="?android:attr/textColorSecondary"
-            android:layout_marginBottom="6dp" />
-
-        <Button
-            android:id="@+id/btnTestRootAccess"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Test / Grant Root Access"
-            android:layout_marginBottom="6dp" />
-
-        <Button
-            android:id="@+id/btnAccessibilitySetup"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Accessibility service setup"
-            android:layout_marginBottom="8dp" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginTop="4dp"
-            android:layout_marginBottom="12dp"
-            android:background="?android:attr/listDivider" />
-
-        <!-- Toast section subtitle -->
-        <TextView
-            android:id="@+id/tvSettingsSubtitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Toast notifications"
-            android:textSize="12sp"
-            android:textColor="?android:attr/textColorSecondary"
-            android:layout_marginBottom="4dp" />
-
-        <!-- Toast options (row 1) -->
         <LinearLayout
-            android:id="@+id/layoutToastOptions"
-            android:orientation="horizontal"
+            android:id="@+id/sectionMenu"
+            android:orientation="vertical"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+            <LinearLayout
+                android:id="@+id/menuGeneral"
+                android:orientation="vertical"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?android:attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:paddingTop="14dp"
+                android:paddingBottom="14dp"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp">
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="General"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Setup, theme, toast messages, text input"
+                    android:textSize="12sp"
+                    android:textColor="?android:attr/textColorSecondary" />
+            </LinearLayout>
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="?android:attr/listDivider" />
+            <LinearLayout
+                android:id="@+id/menuQuickToggle"
+                android:orientation="vertical"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?android:attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:paddingTop="14dp"
+                android:paddingBottom="14dp"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp">
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Quick Toggle"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Which modes Quick Toggle cycles through"
+                    android:textSize="12sp"
+                    android:textColor="?android:attr/textColorSecondary" />
+            </LinearLayout>
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="?android:attr/listDivider" />
+            <LinearLayout
+                android:id="@+id/menuHold"
+                android:orientation="vertical"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?android:attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:paddingTop="14dp"
+                android:paddingBottom="14dp"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp">
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Hold-key switching"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Hold a key to switch modes temporarily"
+                    android:textSize="12sp"
+                    android:textColor="?android:attr/textColorSecondary" />
+            </LinearLayout>
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="?android:attr/listDivider" />
+            <LinearLayout
+                android:id="@+id/menuScroll"
+                android:orientation="vertical"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?android:attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:paddingTop="14dp"
+                android:paddingBottom="14dp"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp">
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Scrolling"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Scroll wheel mode: method, speed, inertia"
+                    android:textSize="12sp"
+                    android:textColor="?android:attr/textColorSecondary" />
+            </LinearLayout>
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="?android:attr/listDivider" />
+            <LinearLayout
+                android:id="@+id/menuExperimental"
+                android:orientation="vertical"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?android:attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:paddingTop="14dp"
+                android:paddingBottom="14dp"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp">
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Gestures &amp; edge scroll"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Experimental: trackpad taps, edge auto-scroll"
+                    android:textSize="12sp"
+                    android:textColor="?android:attr/textColorSecondary" />
+            </LinearLayout>
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="?android:attr/listDivider" />
+            <LinearLayout
+                android:id="@+id/menuExcluded"
+                android:orientation="vertical"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?android:attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:paddingTop="14dp"
+                android:paddingBottom="14dp"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp">
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Excluded apps"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Apps ignored for mode switching"
+                    android:textSize="12sp"
+                    android:textColor="?android:attr/textColorSecondary" />
+            </LinearLayout>
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="?android:attr/listDivider" />
+            <LinearLayout
+                android:id="@+id/menuAbout"
+                android:orientation="vertical"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?android:attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:paddingTop="14dp"
+                android:paddingBottom="14dp"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp">
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Backup, updates &amp; about"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Backup and restore, check for updates"
+                    android:textSize="12sp"
+                    android:textColor="?android:attr/textColorSecondary" />
+            </LinearLayout>
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="?android:attr/listDivider" />
+            <Button
+                android:id="@+id/btnDonate"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:text="Donate to WVU Cancer Center"
+                android:drawableStart="@drawable/ic_heart_24"
+                android:drawablePadding="8dp" />
+        </LinearLayout>
+        <LinearLayout
+            android:id="@+id/sectionGeneral"
+            android:orientation="vertical"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="4dp">
-
-            <CheckBox
-                android:id="@+id/checkToastQuick"
-                android:layout_width="0dp"
+            android:visibility="gone">
+            <!-- Initial Setup -->
+            <TextView
+                android:id="@+id/tvInitialSetupLabel"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
+                android:text="Initial setup"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="4dp" />
+            <TextView
+                android:id="@+id/tvInitialSetupSubtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Use these if Root or the Accessibility Service isn’t enabled yet."
+                android:textSize="12sp"
+                android:textColor="?android:attr/textColorSecondary"
+                android:layout_marginBottom="6dp" />
+            <Button
+                android:id="@+id/btnTestRootAccess"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Test / Grant Root Access"
+                android:layout_marginBottom="6dp" />
+            <Button
+                android:id="@+id/btnAccessibilitySetup"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Accessibility service setup"
+                android:layout_marginBottom="8dp" />
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="12dp"
+                android:background="?android:attr/listDivider" />
+            <!-- Toast section subtitle -->
+            <TextView
+                android:id="@+id/tvSettingsSubtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Toast notifications"
+                android:textSize="12sp"
+                android:textColor="?android:attr/textColorSecondary"
+                android:layout_marginBottom="4dp" />
+            <!-- Toast options (row 1) -->
+            <LinearLayout
+                android:id="@+id/layoutToastOptions"
+                android:orientation="horizontal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="4dp">
+                <CheckBox
+                    android:id="@+id/checkToastQuick"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Quick toggle"
+                    android:textSize="12sp" />
+                <CheckBox
+                    android:id="@+id/checkToastPerApp"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Per-app"
+                    android:textSize="12sp" />
+                <CheckBox
+                    android:id="@+id/checkToastDefault"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Default mode"
+                    android:textSize="12sp" />
+            </LinearLayout>
+            <!-- Toast options (row 2) -->
+            <CheckBox
+                android:id="@+id/checkToastHoldKey"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Hold-key"
+                android:textSize="12sp"
+                android:layout_marginBottom="8dp" />
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="12dp"
+                android:background="?android:attr/listDivider" />
+            <!-- Theme -->
+            <TextView
+                android:id="@+id/tvThemeLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="App theme"
+                android:textSize="14sp" />
+            <Spinner
+                android:id="@+id/spinnerTheme"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp" />
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="12dp"
+                android:background="?android:attr/listDivider" />
+            <!-- Cursor and status -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Mouse cursor speed"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp" />
+            <Spinner
+                android:id="@+id/spinnerCursorSpeed"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp" />
+            <CheckBox
+                android:id="@+id/checkModeNotification"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="Show the current mode in a notification (tap Toggle to switch)"
+                android:textSize="12sp" />
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="12dp"
+                android:background="?android:attr/listDivider" />
+            <!-- Text input behavior -->
+            <TextView
+                android:id="@+id/tvTextInputBehaviorLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Text input behavior"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp" />
+            <CheckBox
+                android:id="@+id/checkAutoKeyboardText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Automatically switch to keyboard mode when a text field is focused"
+                android:textSize="12sp"
+                android:layout_marginBottom="8dp" />
+        </LinearLayout>
+        <LinearLayout
+            android:id="@+id/sectionQuickToggle"
+            android:orientation="vertical"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone">
+            <!-- Quick Toggle settings -->
+            <TextView
+                android:id="@+id/tvQuickToggleLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:text="Quick toggle"
-                android:textSize="12sp" />
-
-            <CheckBox
-                android:id="@+id/checkToastPerApp"
-                android:layout_width="0dp"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp" />
+            <TextView
+                android:id="@+id/tvQuickToggleModesLabel"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Per-app"
+                android:text="Modes to cycle"
                 android:textSize="12sp" />
-
-            <CheckBox
-                android:id="@+id/checkToastDefault"
-                android:layout_width="0dp"
+            <LinearLayout
+                android:id="@+id/layoutQuickToggleModesRow"
+                android:orientation="horizontal"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Default mode"
-                android:textSize="12sp" />
+                android:gravity="center_vertical"
+                android:layout_marginBottom="6dp">
+                <CheckBox
+                    android:id="@+id/checkQuickToggleMouse"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Mouse"
+                    android:textSize="12sp" />
+                <CheckBox
+                    android:id="@+id/checkQuickToggleKeyboard"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Keyboard"
+                    android:textSize="12sp" />
+                <CheckBox
+                    android:id="@+id/checkQuickToggleScroll"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Scroll wheel"
+                    android:textSize="12sp" />
+            </LinearLayout>
+            <TextView
+                android:id="@+id/tvQuickToggleFallbackLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Fallback when only 1 mode is selected (and it matches current)"
+                android:textSize="12sp"
+                android:textColor="?android:attr/textColorSecondary"
+                android:layout_marginBottom="2dp" />
+            <Spinner
+                android:id="@+id/spinnerQuickToggleFallback"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:textIsSelectable="true"
+                android:text="Key mapper apps (Key Mapper, Tasker, MacroDroid) can run Quick Toggle without opening anything by sending the broadcast tech.shroyer.q25trackpadcustomizer.QUICK_TOGGLE to package tech.shroyer.q25trackpadcustomizer. The Quick Toggle shortcut (app shortcut / activity) still works too."
+                android:textSize="11sp"
+                android:textColor="?android:attr/textColorSecondary" />
         </LinearLayout>
-
-        <!-- Toast options (row 2) -->
-        <CheckBox
-            android:id="@+id/checkToastHoldKey"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Hold-key"
-            android:textSize="12sp"
-            android:layout_marginBottom="8dp" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginTop="4dp"
-            android:layout_marginBottom="12dp"
-            android:background="?android:attr/listDivider" />
-
-        <!-- Quick Toggle settings -->
-        <TextView
-            android:id="@+id/tvQuickToggleLabel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Quick toggle"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="4dp" />
-
-        <TextView
-            android:id="@+id/tvQuickToggleModesLabel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Modes to cycle"
-            android:textSize="12sp" />
-
         <LinearLayout
-            android:id="@+id/layoutQuickToggleModesRow"
-            android:orientation="horizontal"
+            android:id="@+id/sectionHold"
+            android:orientation="vertical"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="6dp">
-
-            <CheckBox
-                android:id="@+id/checkQuickToggleMouse"
-                android:layout_width="0dp"
+            android:visibility="gone">
+            <!-- Hold-key switching (Primary Hold) -->
+            <TextView
+                android:id="@+id/tvHoldKeyLabel"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Mouse"
-                android:textSize="12sp" />
-
-            <CheckBox
-                android:id="@+id/checkQuickToggleKeyboard"
-                android:layout_width="0dp"
+                android:text="Hold-key switching"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp" />
+            <TextView
+                android:id="@+id/tvHoldModeLabel"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Keyboard"
+                android:text="Primary Hold mode"
                 android:textSize="12sp" />
-
-            <CheckBox
-                android:id="@+id/checkQuickToggleScroll"
-                android:layout_width="0dp"
+            <Spinner
+                android:id="@+id/spinnerGlobalHoldMode"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Scroll wheel"
+                android:layout_marginBottom="8dp" />
+            <TextView
+                android:id="@+id/tvHoldKeyLabel2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Primary Hold key"
                 android:textSize="12sp" />
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/tvQuickToggleFallbackLabel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Fallback when only 1 mode is selected (and it matches current)"
-            android:textSize="12sp"
-            android:textColor="?android:attr/textColorSecondary"
-            android:layout_marginBottom="2dp" />
-
-        <Spinner
-            android:id="@+id/spinnerQuickToggleFallback"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginBottom="8dp"
-            android:background="?android:attr/listDivider" />
-
-        <!-- Theme -->
-        <TextView
-            android:id="@+id/tvThemeLabel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="App theme"
-            android:textSize="14sp" />
-
-        <Spinner
-            android:id="@+id/spinnerTheme"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp" />
-
-        <!-- Backup & Restore -->
-        <TextView
-            android:id="@+id/tvBackupLabel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Backup &amp; restore"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="4dp" />
-
-        <LinearLayout
-            android:id="@+id/layoutBackupRow"
-            android:orientation="horizontal"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp">
-
+            <TextView
+                android:id="@+id/tvGlobalHoldKeyCode"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="SHIFT LEFT (59)"
+                android:textSize="12sp"
+                android:textColor="?android:attr/textColorSecondary"
+                android:layout_marginTop="2dp"
+                android:layout_marginBottom="6dp" />
             <Button
-                android:id="@+id/btnBackupSettings"
-                android:layout_width="0dp"
+                android:id="@+id/btnSetGlobalHoldKey"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Backup settings" />
-
+                android:text="Set Primary Hold key"
+                android:layout_marginBottom="6dp" />
+            <CheckBox
+                android:id="@+id/checkHoldAllowedInTextGlobal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Allow Primary Hold switching in text fields"
+                android:textSize="12sp"
+                android:layout_marginBottom="6dp" />
+            <CheckBox
+                android:id="@+id/checkHoldDoublePressGlobal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Primary Hold: require double press + hold"
+                android:textSize="12sp"
+                android:layout_marginBottom="8dp" />
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="12dp"
+                android:background="?android:attr/listDivider" />
+            <!-- Secondary hold -->
+            <TextView
+                android:id="@+id/tvHold2KeyLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Secondary hold switching"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp" />
+            <TextView
+                android:id="@+id/tvHold2ModeLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Secondary Hold mode"
+                android:textSize="12sp" />
+            <Spinner
+                android:id="@+id/spinnerGlobalHold2Mode"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="6dp" />
+            <CheckBox
+                android:id="@+id/checkHold2UseHold1DoubleGlobal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Secondary Hold: trigger using Primary Hold double press + hold (no separate Secondary Hold key)"
+                android:textSize="12sp"
+                android:layout_marginBottom="6dp" />
+            <TextView
+                android:id="@+id/tvHold2KeyLabel2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Secondary Hold key"
+                android:textSize="12sp" />
+            <TextView
+                android:id="@+id/tvGlobalHold2KeyCode"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="SHIFT RIGHT (60)"
+                android:textSize="12sp"
+                android:textColor="?android:attr/textColorSecondary"
+                android:layout_marginTop="2dp"
+                android:layout_marginBottom="6dp" />
             <Button
-                android:id="@+id/btnRestoreSettings"
-                android:layout_width="0dp"
+                android:id="@+id/btnSetGlobalHold2Key"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="8dp"
-                android:text="Restore settings" />
+                android:text="Set Secondary Hold key"
+                android:layout_marginBottom="6dp" />
+            <CheckBox
+                android:id="@+id/checkHold2AllowedInTextGlobal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Allow Secondary Hold switching in text fields"
+                android:textSize="12sp"
+                android:layout_marginBottom="6dp" />
+            <CheckBox
+                android:id="@+id/checkHold2DoublePressGlobal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Secondary Hold: require double press + hold (when using its own key)"
+                android:textSize="12sp"
+                android:layout_marginBottom="8dp" />
         </LinearLayout>
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginBottom="8dp"
-            android:background="?android:attr/listDivider" />
-
-        <!-- Text input behavior -->
-        <TextView
-            android:id="@+id/tvTextInputBehaviorLabel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Text input behavior"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="4dp" />
-
-        <CheckBox
-            android:id="@+id/checkAutoKeyboardText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Automatically switch to keyboard mode when a text field is focused"
-            android:textSize="12sp"
-            android:layout_marginBottom="8dp" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginBottom="8dp"
-            android:background="?android:attr/listDivider" />
-
-        <!-- Hold-key switching (Primary Hold) -->
-        <TextView
-            android:id="@+id/tvHoldKeyLabel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Hold-key switching"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="4dp" />
-
-        <TextView
-            android:id="@+id/tvHoldModeLabel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Primary Hold mode"
-            android:textSize="12sp" />
-
-        <Spinner
-            android:id="@+id/spinnerGlobalHoldMode"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp" />
-
-        <TextView
-            android:id="@+id/tvHoldKeyLabel2"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Primary Hold key"
-            android:textSize="12sp" />
-
-        <TextView
-            android:id="@+id/tvGlobalHoldKeyCode"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="SHIFT LEFT (59)"
-            android:textSize="12sp"
-            android:textColor="?android:attr/textColorSecondary"
-            android:layout_marginTop="2dp"
-            android:layout_marginBottom="6dp" />
-
-        <Button
-            android:id="@+id/btnSetGlobalHoldKey"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Set Primary Hold key"
-            android:layout_marginBottom="6dp" />
-
-        <CheckBox
-            android:id="@+id/checkHoldAllowedInTextGlobal"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Allow Primary Hold switching in text fields"
-            android:textSize="12sp"
-            android:layout_marginBottom="6dp" />
-
-        <CheckBox
-            android:id="@+id/checkHoldDoublePressGlobal"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Primary Hold: require double press + hold"
-            android:textSize="12sp"
-            android:layout_marginBottom="8dp" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginBottom="8dp"
-            android:background="?android:attr/listDivider" />
-
-        <!-- Secondary hold -->
-        <TextView
-            android:id="@+id/tvHold2KeyLabel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Secondary hold switching"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="4dp" />
-
-        <TextView
-            android:id="@+id/tvHold2ModeLabel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Secondary Hold mode"
-            android:textSize="12sp" />
-
-        <Spinner
-            android:id="@+id/spinnerGlobalHold2Mode"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="6dp" />
-
-        <CheckBox
-            android:id="@+id/checkHold2UseHold1DoubleGlobal"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Secondary Hold: trigger using Primary Hold double press + hold (no separate Secondary Hold key)"
-            android:textSize="12sp"
-            android:layout_marginBottom="6dp" />
-
-        <TextView
-            android:id="@+id/tvHold2KeyLabel2"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Secondary Hold key"
-            android:textSize="12sp" />
-
-        <TextView
-            android:id="@+id/tvGlobalHold2KeyCode"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="SHIFT RIGHT (60)"
-            android:textSize="12sp"
-            android:textColor="?android:attr/textColorSecondary"
-            android:layout_marginTop="2dp"
-            android:layout_marginBottom="6dp" />
-
-        <Button
-            android:id="@+id/btnSetGlobalHold2Key"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Set Secondary Hold key"
-            android:layout_marginBottom="6dp" />
-
-        <CheckBox
-            android:id="@+id/checkHold2AllowedInTextGlobal"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Allow Secondary Hold switching in text fields"
-            android:textSize="12sp"
-            android:layout_marginBottom="6dp" />
-
-        <CheckBox
-            android:id="@+id/checkHold2DoublePressGlobal"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Secondary Hold: require double press + hold (when using its own key)"
-            android:textSize="12sp"
-            android:layout_marginBottom="8dp" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginBottom="8dp"
-            android:background="?android:attr/listDivider" />
-
-        <!-- Global scroll wheel settings -->
-        <TextView
-            android:id="@+id/tvScrollSettingsLabel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Scroll wheel settings"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="4dp" />
-
-        <TextView
-            android:id="@+id/tvScrollSensLabel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Sensitivity"
-            android:textSize="12sp" />
-
-        <Spinner
-            android:id="@+id/spinnerScrollSensitivity"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="4dp" />
-
         <LinearLayout
-            android:id="@+id/layoutScrollOptionsRow"
-            android:orientation="horizontal"
+            android:id="@+id/sectionScroll"
+            android:orientation="vertical"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="8dp">
-
-            <CheckBox
-                android:id="@+id/checkScrollHorizontal"
-                android:layout_width="0dp"
+            android:visibility="gone">
+            <!-- Global scroll wheel settings -->
+            <TextView
+                android:id="@+id/tvScrollSettingsLabel"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Horizontal"
-                android:textSize="12sp" />
-
-            <CheckBox
-                android:id="@+id/checkScrollInvertVertical"
-                android:layout_width="0dp"
+                android:text="Scroll wheel settings"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp" />
+            <TextView
+                android:id="@+id/tvScrollSensLabel"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Invert vertical"
+                android:text="Sensitivity"
                 android:textSize="12sp" />
-
-            <CheckBox
-                android:id="@+id/checkScrollInvertHorizontal"
-                android:layout_width="0dp"
+            <Spinner
+                android:id="@+id/spinnerScrollSensitivity"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Invert horizontal"
+                android:layout_marginBottom="4dp" />
+            <TextView
+                android:id="@+id/tvScrollMethodLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Scroll method (default for all apps)"
                 android:textSize="12sp" />
+            <Spinner
+                android:id="@+id/spinnerScrollMethod"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="4dp" />
+            <TextView
+                android:id="@+id/tvScrollMethodNote"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="Classic: each trackpad tick sends one swipe, like the original app. Touch: the trackpad stays in mouse mode and drives a virtual finger that follows your finger, so the distance matches how far you slide and apps fling naturally (needs root; a press of the pad acts as Enter). Sensitivity sets how far each method moves."
+                android:textSize="11sp"
+                android:textColor="?android:attr/textColorSecondary" />
+            <CheckBox
+                android:id="@+id/checkScrollHomeShortcuts"
+                android:visibility="gone"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="4dp"
+                android:text="Home screen shortcuts (Wheel method): flick up opens the app drawer, flick down opens notifications"
+                android:textSize="12sp" />
+            <LinearLayout
+                android:id="@+id/layoutScrollOptionsRow"
+                android:orientation="horizontal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp">
+                <CheckBox
+                    android:id="@+id/checkScrollHorizontal"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Horizontal"
+                    android:textSize="12sp" />
+                <CheckBox
+                    android:id="@+id/checkScrollInvertVertical"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Invert vertical"
+                    android:textSize="12sp" />
+                <CheckBox
+                    android:id="@+id/checkScrollInvertHorizontal"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Invert horizontal"
+                    android:textSize="12sp" />
+            </LinearLayout>
+            <TextView
+                android:id="@+id/tvScrollSmoothnessLabel"
+                android:visibility="gone"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Smoothness (Wheel method only)"
+                android:textSize="12sp" />
+            <Spinner
+                android:id="@+id/spinnerScrollSmoothness"
+                android:visibility="gone"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="4dp" />
+            <CheckBox
+                android:id="@+id/checkScrollAcceleration"
+                android:visibility="gone"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="Acceleration: quick flicks scroll further (Wheel method)"
+                android:textSize="12sp" />
+            <TextView
+                android:id="@+id/tvScrollInertiaLabel"
+                android:visibility="gone"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Inertia: glide after a quick flick (Wheel and Drag methods; Classic uses the app’s own fling)"
+                android:textSize="12sp" />
+            <Spinner
+                android:id="@+id/spinnerScrollInertia"
+                android:visibility="gone"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp" />
         </LinearLayout>
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginBottom="8dp"
-            android:background="?android:attr/listDivider" />
-
-        <!-- Updates -->
-        <TextView
-            android:id="@+id/tvUpdatesLabel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Updates"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="4dp" />
-
-        <Button
-            android:id="@+id/btnCheckUpdates"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Check for updates"
-            android:layout_marginBottom="4dp" />
-
-        <TextView
-            android:id="@+id/tvViewOnGitHub"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="View on GitHub"
-            android:textSize="12sp"
-            android:textColor="?android:attr/textColorSecondary"
-            android:paddingTop="2dp"
-            android:paddingBottom="6dp"
-            android:clickable="true"
-            android:focusable="true" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginBottom="8dp"
-            android:background="?android:attr/listDivider" />
-
-        <!-- Excluded apps section -->
-        <TextView
-            android:id="@+id/tvExcludedLabel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Excluded apps (ignored for mode switching)"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="4dp" />
-
         <LinearLayout
-            android:orientation="horizontal"
+            android:id="@+id/sectionExperimental"
+            android:orientation="vertical"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="4dp">
-
-            <EditText
-                android:id="@+id/editSearchExcluded"
-                android:layout_width="0dp"
+            android:visibility="gone">
+            <!-- Experimental -->
+            <TextView
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:hint="Search exclusions..."
-                android:singleLine="true" />
-
-            <ImageButton
-                android:id="@+id/btnResetExcluded"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:layout_marginStart="4dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Reset exclusions to default"
-                android:src="@android:drawable/ic_menu_revert" />
+                android:text="Experimental"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp" />
+            <CheckBox
+                android:id="@+id/checkEdgeScrollEnabled"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Edge auto-scroll (experimental): scroll a bit when the cursor or focus reaches the edge"
+                android:textSize="12sp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Directions"
+                android:textSize="12sp"
+                android:layout_marginTop="2dp" />
+            <LinearLayout
+                android:id="@+id/layoutEdgeDirections"
+                android:orientation="horizontal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+                <CheckBox
+                    android:id="@+id/checkEdgeScrollUp"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Up"
+                    android:textSize="12sp" />
+                <CheckBox
+                    android:id="@+id/checkEdgeScrollDown"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Down"
+                    android:textSize="12sp" />
+                <CheckBox
+                    android:id="@+id/checkEdgeScrollLeft"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Left"
+                    android:textSize="12sp" />
+                <CheckBox
+                    android:id="@+id/checkEdgeScrollRight"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Right"
+                    android:textSize="12sp" />
+            </LinearLayout>
+            <LinearLayout
+                android:id="@+id/layoutEdgeModes"
+                android:orientation="horizontal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+                <CheckBox
+                    android:id="@+id/checkEdgeScrollInMouse"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="In Mouse mode"
+                    android:textSize="12sp" />
+                <CheckBox
+                    android:id="@+id/checkEdgeScrollInKeyboard"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="In Keyboard mode"
+                    android:textSize="12sp" />
+            </LinearLayout>
+            <TextView
+                android:id="@+id/tvEdgeScrollSpeedLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Edge scroll speed"
+                android:textSize="12sp" />
+            <Spinner
+                android:id="@+id/spinnerEdgeScrollSpeed"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+            <TextView
+                android:id="@+id/tvEdgeScrollNote"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Mouse mode: push the cursor against the edge of the screen to scroll. Keyboard mode: scrolls further when the D-pad reaches the edge of the page. Smoothest with root. Each app can override these in its app settings."
+                android:textSize="11sp"
+                android:textColor="?android:attr/textColorSecondary"
+                android:layout_marginBottom="8dp" />
+            <TextView
+                android:id="@+id/tvEdgeScrollStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textSize="11sp"
+                android:textStyle="italic"
+                android:textColor="?android:attr/textColorSecondary"
+                android:layout_marginBottom="8dp" />
+            <CheckBox
+                android:id="@+id/checkPadGestures"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Trackpad tap gestures (experimental): double and triple tap the pad surface"
+                android:textSize="12sp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Double tap action"
+                android:textSize="12sp" />
+            <Spinner
+                android:id="@+id/spinnerPadDoubleTap"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Triple tap action"
+                android:textSize="12sp" />
+            <Spinner
+                android:id="@+id/spinnerPadTripleTap"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Tap the pad surface (not the click). Works in every mode (taps are recognised from the pad’s motion). Needs root. The Quick Toggle shortcut still works for key mapper apps. Every gesture is also broadcast as tech.shroyer.q25trackpadcustomizer.PAD_TAP (extra: taps = 2 or 3) for Tasker/MacroDroid, and the F9-F12 actions can be used as Key Mapper triggers. Each app can override these."
+                android:textSize="11sp"
+                android:textColor="?android:attr/textColorSecondary" />
+            <TextView
+                android:id="@+id/tvPadTapStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textSize="11sp"
+                android:textStyle="italic"
+                android:textColor="?android:attr/textColorSecondary"
+                android:layout_marginBottom="8dp" />
         </LinearLayout>
-
-        <Button
-            android:id="@+id/btnAddExcludedApps"
+        <LinearLayout
+            android:id="@+id/sectionExcluded"
+            android:orientation="vertical"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Add apps to exclusion list"
-            android:layout_marginBottom="4dp" />
-
-        <!-- Fixed-height list; screen scrolls -->
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/recyclerExcludedApps"
+            android:visibility="gone">
+            <!-- Excluded apps section -->
+            <TextView
+                android:id="@+id/tvExcludedLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Excluded apps (ignored for mode switching)"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp" />
+            <LinearLayout
+                android:orientation="horizontal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="4dp">
+                <EditText
+                    android:id="@+id/editSearchExcluded"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="Search exclusions..."
+                    android:singleLine="true" />
+                <ImageButton
+                    android:id="@+id/btnResetExcluded"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="4dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Reset exclusions to default"
+                    android:src="@android:drawable/ic_menu_revert" />
+            </LinearLayout>
+            <Button
+                android:id="@+id/btnAddExcludedApps"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Add apps to exclusion list"
+                android:layout_marginBottom="4dp" />
+            <!-- Fixed-height list; screen scrolls -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recyclerExcludedApps"
+                android:layout_width="match_parent"
+                android:layout_height="200dp"
+                android:nestedScrollingEnabled="false" />
+        </LinearLayout>
+        <LinearLayout
+            android:id="@+id/sectionAbout"
+            android:orientation="vertical"
             android:layout_width="match_parent"
-            android:layout_height="200dp"
-            android:nestedScrollingEnabled="false" />
-
+            android:layout_height="wrap_content"
+            android:visibility="gone">
+            <!-- Backup & Restore -->
+            <TextView
+                android:id="@+id/tvBackupLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Backup &amp; restore"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp" />
+            <LinearLayout
+                android:id="@+id/layoutBackupRow"
+                android:orientation="horizontal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp">
+                <Button
+                    android:id="@+id/btnBackupSettings"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Backup settings" />
+                <Button
+                    android:id="@+id/btnRestoreSettings"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="8dp"
+                    android:text="Restore settings" />
+            </LinearLayout>
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="12dp"
+                android:background="?android:attr/listDivider" />
+            <!-- Updates -->
+            <TextView
+                android:id="@+id/tvUpdatesLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Updates"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp" />
+            <Button
+                android:id="@+id/btnCheckUpdates"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Check for updates"
+                android:layout_marginBottom="4dp" />
+            <TextView
+                android:id="@+id/tvViewOnGitHub"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="View on GitHub"
+                android:textSize="12sp"
+                android:textColor="?android:attr/textColorSecondary"
+                android:paddingTop="2dp"
+                android:paddingBottom="6dp"
+                android:clickable="true"
+                android:focusable="true" />
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="12dp"
+                android:background="?android:attr/listDivider" />
+            <!-- Diagnostics -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Diagnostics"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Checks what this phone supports. If something doesn't work, copy this text into your bug report."
+                android:textSize="12sp"
+                android:textColor="?android:attr/textColorSecondary"
+                android:layout_marginBottom="4dp" />
+            <Button
+                android:id="@+id/btnRunDiagnostics"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Run diagnostics" />
+            <TextView
+                android:id="@+id/tvDiagnostics"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textSize="12sp"
+                android:fontFamily="monospace"
+                android:textIsSelectable="true"
+                android:layout_marginBottom="4dp" />
+            <Button
+                android:id="@+id/btnCopyDiagnostics"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:visibility="gone"
+                android:text="Copy diagnostics" />
+        </LinearLayout>
     </LinearLayout>
 </ScrollView>
