@@ -990,6 +990,47 @@
                 android:paddingBottom="6dp"
                 android:clickable="true"
                 android:focusable="true" />
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="12dp"
+                android:background="?android:attr/listDivider" />
+            <!-- Diagnostics -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Diagnostics"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Checks what this phone supports. If something doesn't work, copy this text into your bug report."
+                android:textSize="12sp"
+                android:textColor="?android:attr/textColorSecondary"
+                android:layout_marginBottom="4dp" />
+            <Button
+                android:id="@+id/btnRunDiagnostics"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Run diagnostics" />
+            <TextView
+                android:id="@+id/tvDiagnostics"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textSize="12sp"
+                android:fontFamily="monospace"
+                android:textIsSelectable="true"
+                android:layout_marginBottom="4dp" />
+            <Button
+                android:id="@+id/btnCopyDiagnostics"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:visibility="gone"
+                android:text="Copy diagnostics" />
         </LinearLayout>
     </LinearLayout>
 </ScrollView>

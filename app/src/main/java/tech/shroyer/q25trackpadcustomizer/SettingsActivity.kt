@@ -1078,6 +1078,31 @@ If you’re using something else, look for a “Superuser / SU” permission lis
         tvQuickToggleFallbackLabel.alpha = if (enabled) 1.0f else 0.5f
     }
 
+    // ---------- Diagnostics ----------
+
+    private fun setupDiagnostics() {
+        val tv = findViewById<TextView>(R.id.tvDiagnostics)
+        val btnRun = findViewById<Button>(R.id.btnRunDiagnostics)
+        val btnCopy = findViewById<Button>(R.id.btnCopyDiagnostics)
+        btnRun.setOnClickListener {
+            btnRun.isEnabled = false
+            tv.text = "Running…"
+            Thread {
+                val report = Diagnostics.collect(this)
+                runOnUiThread {
+                    tv.text = report
+                    btnRun.isEnabled = true
+                    btnCopy.visibility = View.VISIBLE
+                }
+            }.start()
+        }
+        btnCopy.setOnClickListener {
+            val cm = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("Q25 diagnostics", tv.text))
+            Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     // ---------- Cursor speed + mode notification ----------
 
     private val cursorSpeedValues = listOf(-6, -3, 0, 3, 6)
@@ -1646,6 +1671,7 @@ If you’re using something else, look for a “Superuser / SU” permission lis
     private fun setupViewOnGitHubLink() {
         tvViewOnGitHub.paintFlags = tvViewOnGitHub.paintFlags or Paint.UNDERLINE_TEXT_FLAG
         tvViewOnGitHub.setOnClickListener { openGitHubReleasePage() }
+        setupDiagnostics()
     }
 
     private fun openGitHubReleasePage() {
