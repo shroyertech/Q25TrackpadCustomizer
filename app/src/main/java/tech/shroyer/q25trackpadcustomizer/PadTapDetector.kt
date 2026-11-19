@@ -141,6 +141,37 @@ class PadTapDetector(private val onTaps: (Int) -> Unit) {
         kmsgWorking = false
     }
 
+    /**
+     * Motion from the touch-scroll helper, which holds the trackpad exclusively while it
+     * runs (so the device readers here see nothing): same handling as evdev REL reports.
+     */
+    fun injectRel(dx: Int, dy: Int) {
+        if (!enabled) return
+        report(abs(dx) + abs(dy), maxOf(abs(dx), abs(dy)), SystemClock.uptimeMillis(), REL_LIMITS)
+    }
+
+    /** A key or pad press seen by the touch-scroll helper: cancels any tap sequence. */
+    fun injectKey() {
+        synchronized(lock) {
+            tapCount = 0
+            burstOpen = false
+        }
+    }
+
+    /** The device the touch-scroll helper should grab: the one that really carries the pad. */
+    fun touchDevice(): String? {
+        val found = findPointerDevices()
+        // On the Q25 a virtual device (under /sys/devices/virtual) carries all trackpad and
+        // keyboard events, while the physical one stays silent: prefer the virtual one.
+        return found.firstOrNull { dev ->
+            try {
+                File("/sys/class/input/${File(dev).name}").canonicalPath.contains("/virtual/")
+            } catch (_: Exception) {
+                false
+            }
+        } ?: found.lastOrNull()
+    }
+
     /** Devices that can report relative X/Y motion (the trackpad, incl. virtual copies). */
     private fun findPointerDevices(): List<String> {
         val out = ArrayList<String>()

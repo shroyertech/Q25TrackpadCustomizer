@@ -178,6 +178,16 @@ object WheelInjectorMain {
             }
         }
         var padStarted = false
+        val touch = TouchScrollProcess(
+            onRel = { dx, dy -> pad.injectRel(dx, dy) },
+            onKey = { pad.injectKey() },
+            onStatus = { s ->
+                synchronized(out) {
+                    println("touch $s")
+                    System.out.flush()
+                }
+            }
+        )
         val clicker = java.util.concurrent.Executors.newSingleThreadExecutor()
 
         val reader = BufferedReader(InputStreamReader(System.`in`))
@@ -191,6 +201,22 @@ object WheelInjectorMain {
             val parts = line.trim().split(' ')
             when (parts.firstOrNull()) {
                 "q" -> break
+                "u" -> {
+                    // u 0 = stop; u 1 <helper path> <w> <h> <scale> <horiz> <invV> <invH>
+                    if (parts.getOrNull(1) == "1" && parts.size >= 9) {
+                        val dev = pad.touchDevice()
+                        if (dev == null) {
+                            synchronized(out) {
+                                println("touch err no-device")
+                                System.out.flush()
+                            }
+                        } else {
+                            touch.start(listOf(parts[2], dev) + parts.subList(3, 9))
+                        }
+                    } else {
+                        touch.stop()
+                    }
+                }
                 "t" -> {
                     val on = parts.getOrNull(1) == "1"
                     if (on && !padStarted) {
@@ -244,6 +270,7 @@ object WheelInjectorMain {
                 }
             }
         }
+        touch.stop()
         System.exit(0)
     }
 

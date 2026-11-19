@@ -58,6 +58,17 @@ class Prefs(context: Context) {
         editor.apply()
     }
 
+    // ---- Cursor speed + mode notification ----
+
+    /** Android pointer speed, -7..7 (0 = system default). */
+    fun getCursorSpeed(): Int = prefs.getInt(KEY_CURSOR_SPEED, 0)
+
+    fun setCursorSpeed(v: Int) = prefs.edit().putInt(KEY_CURSOR_SPEED, v.coerceIn(-7, 7)).apply()
+
+    fun isModeNotificationEnabled(): Boolean = prefs.getBoolean(KEY_MODE_NOTIFICATION, false)
+
+    fun setModeNotificationEnabled(v: Boolean) = prefs.edit().putBoolean(KEY_MODE_NOTIFICATION, v).apply()
+
     // ---- Toast settings ----
 
     fun isToastQuickToggleEnabled(): Boolean = prefs.getBoolean(KEY_TOAST_QUICK_TOGGLE, true)
@@ -852,6 +863,8 @@ class Prefs(context: Context) {
         private const val PREFIX_APP_MODE = "app_mode_"
         private fun keyAppMode(pkg: String) = "$PREFIX_APP_MODE$pkg"
 
+        private const val KEY_CURSOR_SPEED = "cursor_speed"
+        private const val KEY_MODE_NOTIFICATION = "mode_notification"
         private const val KEY_TOAST_QUICK_TOGGLE = "toast_quick_toggle"
         private const val KEY_TOAST_PER_APP = "toast_per_app"
         private const val KEY_TOAST_DEFAULT_MODE = "toast_default_mode"

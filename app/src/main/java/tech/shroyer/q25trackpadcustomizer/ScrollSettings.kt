@@ -3,10 +3,11 @@ package tech.shroyer.q25trackpadcustomizer
 // Set how strong the scroll effect is for each key press.
 // steps: used by the touch-gesture fallback (no root).
 // wheelNotches: mouse-wheel notches per key press when real wheel events are used.
-enum class ScrollSensitivity(val prefValue: Int, val steps: Int, val wheelNotches: Float) {
-    SLOW(0, 1, 0.6f),
-    MEDIUM(1, 2, 1.0f),
-    FAST(2, 3, 1.6f);
+// touchScale: Touch method, screen pixels the virtual finger moves per trackpad count.
+enum class ScrollSensitivity(val prefValue: Int, val steps: Int, val wheelNotches: Float, val touchScale: Float) {
+    SLOW(0, 1, 0.6f, 4.5f),
+    MEDIUM(1, 2, 1.0f, 6.0f),
+    FAST(2, 3, 1.6f, 8.0f);
 
     companion object {
         fun fromPrefValue(value: Int): ScrollSensitivity {
@@ -45,15 +46,15 @@ enum class ScrollInertia(val prefValue: Int, val level: Int) {
 }
 
 // How scroll-wheel mode moves content.
-// CLASSIC: the original behaviour: each trackpad tick sends one fixed touch swipe from the
-//          middle of the screen (a new tick replaces the swipe in progress), and the app's
-//          own fling physics do the rest. Consistent, and needs no root.
-// WHEEL: real mouse-wheel events through the root helper (falls back to DRAG without root).
-// DRAG: simulated finger drags. Apps see touch swipes, so swipe gestures (e.g. a launcher's
-//       swipe-up app drawer) work, but lists can hit edge gestures.
+// CLASSIC: the original behaviour: each trackpad tick (an arrow key from the pad in keyboard
+//          mode) sends one fixed touch swipe from the middle of the screen, and the app's own
+//          fling physics do the rest. Needs no root.
+// TOUCH: the pad stays in mouse mode and a native root helper turns its fine motion into a
+//        virtual finger on a virtual touchscreen, moved in proportion to the finger on the
+//        pad (falls back to CLASSIC without root).
+// (Values 0 = the old mouse-wheel method and 1 = the old drag method; 1 now means TOUCH.)
 enum class ScrollMethod(val prefValue: Int) {
-    WHEEL(0),
-    DRAG(1),
+    TOUCH(1),
     CLASSIC(2);
 
     companion object {

@@ -96,6 +96,20 @@ class WheelInjector(context: Context) {
         send("t ${if (on) 1 else 0}\n")
     }
 
+    @Volatile
+    private var touchConfig: String? = null
+
+    /**
+     * Touch scroll on/off. [config] = "<helper path> <w> <h> <scale> <horiz> <invV> <invH>",
+     * or null to stop (the trackpad is released). Remembered across helper restarts.
+     */
+    fun setTouchScroll(config: String?) {
+        if (config == touchConfig && (config == null || isReady)) return
+        touchConfig = config
+        if (config != null) ensureStarted()
+        send(if (config != null) "u 1 $config\n" else "u 0\n")
+    }
+
     /** Click at the cursor: 1..3 left clicks, 0 = right click. */
     fun click(count: Int): Boolean = send("k $count\n")
 
@@ -167,6 +181,7 @@ class WheelInjector(context: Context) {
                 try {
                     w.write(configLine())
                     if (tapDetection) w.write("t 1\n")
+                    touchConfig?.let { w.write("u 1 $it\n") }
                     w.flush()
                 } catch (_: Exception) {
                 }

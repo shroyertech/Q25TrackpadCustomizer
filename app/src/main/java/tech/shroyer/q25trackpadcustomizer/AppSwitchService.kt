@@ -80,6 +80,69 @@ class AppSwitchService : AccessibilityService() {
         if (key == null || key.startsWith(Prefs.PAD_GESTURES_KEY_PREFIX)) {
             mainHandler.post { refreshPadGestures() }
         }
+        if (key == null || key.startsWith("scroll_")) {
+            mainHandler.post { syncTouchScroll() }
+        }
+        if (key == null || key == "mode_notification") {
+            mainHandler.post { updateModeNotification() }
+        }
+    }
+
+    // ---------- TOUCH SCROLL (Scroll wheel mode, Touch method) ----------
+    //
+    // The hardware stays in mouse mode and the root helper runs the native touch-scroll
+    // program, which grabs the trackpad and drives a virtual finger from its motion.
+
+    private var touchScrollActive = false
+
+    private fun touchScrollWanted(mode: Mode? = AppState.currentMode): Boolean =
+        mode == Mode.SCROLL_WHEEL &&
+                prefs.getEffectiveScrollSettings(AppState.currentForegroundPackage).method == ScrollMethod.TOUCH &&
+                java.io.File(touchHelperPath()).exists()
+
+    private fun touchHelperPath(): String = applicationInfo.nativeLibraryDir + "/libq25touch.so"
+
+    /** Start/stop/reconfigure touch scroll to match the current mode, app and settings. */
+    private fun syncTouchScroll() {
+        val want = touchScrollWanted()
+        if (want) {
+            val s = prefs.getEffectiveScrollSettings(AppState.currentForegroundPackage)
+            val dm = android.util.DisplayMetrics()
+            @Suppress("DEPRECATION")
+            (getSystemService(WINDOW_SERVICE) as android.view.WindowManager).defaultDisplay.getRealMetrics(dm)
+            val cfg = listOf(
+                touchHelperPath(), dm.widthPixels, dm.heightPixels,
+                String.format(java.util.Locale.US, "%.2f", s.sensitivity.touchScale),
+                if (s.horizontalEnabled) 1 else 0,
+                if (s.invertVertical) 1 else 0,
+                if (s.invertHorizontal) 1 else 0
+            ).joinToString(" ")
+            wheelInjector.setTouchScroll(cfg)
+        } else {
+            wheelInjector.setTouchScroll(null)
+        }
+        if (want != touchScrollActive) {
+            touchScrollActive = want
+            android.util.Log.i("Q25Mode", "touch scroll ${if (want) "on" else "off"}")
+            // The hardware value for Scroll wheel mode differs between methods.
+            if (AppState.currentMode == Mode.SCROLL_WHEEL) TrackpadController.requestMode(Mode.SCROLL_WHEEL)
+        }
+    }
+
+    private fun onModeChangedMain() {
+        syncTouchScroll()
+        edgeScroller.updateStrips()
+        updateModeNotification()
+    }
+
+    private fun updateModeNotification() {
+        if (!prefs.isModeNotificationEnabled()) {
+            NotificationHelper.clearModeStatus(this)
+            return
+        }
+        val mode = AppState.currentMode ?: return
+        val fg = AppState.currentForegroundPackage
+        NotificationHelper.showModeStatus(this, modeLabel(mode), fg?.let { getAppLabel(it) })
     }
 
     private var contentCheckScheduled = false
@@ -159,6 +222,11 @@ class AppSwitchService : AccessibilityService() {
         TrackpadController.warmUp()
 
         prefs.registerListener(prefListener)
+        TrackpadController.procValueOverride = { mode ->
+            if (mode == Mode.SCROLL_WHEEL && touchScrollWanted(mode)) "0" else null
+        }
+        AppState.onModeChanged = { mainHandler.post { onModeChangedMain() } }
+        mainHandler.post { onModeChangedMain() }
         edgeScroller.refresh()
         wheelInjector.onHelperLine = { line -> onHelperLine(line) }
         refreshPadGestures()
@@ -170,6 +238,10 @@ class AppSwitchService : AccessibilityService() {
 
     override fun onDestroy() {
         if (instance === this) instance = null
+        AppState.onModeChanged = null
+        TrackpadController.procValueOverride = null
+        wheelInjector.setTouchScroll(null)
+        NotificationHelper.clearModeStatus(this)
         ToastHelper.dismissOverlay()
         try {
             prefs.unregisterListener(prefListener)
@@ -337,9 +409,10 @@ class AppSwitchService : AccessibilityService() {
         val settings = prefs.getEffectiveScrollSettings(pkg)
         val steps = settings.sensitivity.steps
         val notches = settings.sensitivity.wheelNotches
-        val useWheel = settings.method == ScrollMethod.WHEEL
+        val useWheel = false
 
-        if (settings.method == ScrollMethod.CLASSIC) {
+        // Classic, and Touch when arrow keys still arrive (no root / helper not running yet).
+        if (settings.method == ScrollMethod.CLASSIC || settings.method == ScrollMethod.TOUCH) {
             classicScroll(event.keyCode, settings, steps)
             return
         }
@@ -1563,7 +1636,14 @@ class AppSwitchService : AccessibilityService() {
         }
 
         val prevFg = AppState.currentForegroundPackage
-        if (prevFg != packageName) android.util.Log.i("Q25Mode", "foreground $prevFg -> $packageName")
+        if (prevFg != packageName) {
+            android.util.Log.i("Q25Mode", "foreground $prevFg -> $packageName")
+            // Per-app scroll method / notification text may differ for the new app.
+            mainHandler.post {
+                syncTouchScroll()
+                updateModeNotification()
+            }
+        }
         AppState.currentForegroundPackage = packageName
         val appChanged = prevFg != null && prevFg != packageName
         if (appChanged) edgeScroller.onWindowsChanged()

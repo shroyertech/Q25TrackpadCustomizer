@@ -163,14 +163,12 @@ class SettingsActivity : AppCompatActivity() {
 
     private val scrollMethodOptions = listOf(
         ScrollMethod.CLASSIC,
-        ScrollMethod.WHEEL,
-        ScrollMethod.DRAG
+        ScrollMethod.TOUCH
     )
 
     private val scrollMethodLabels = listOf(
         "Classic (original swipes)",
-        "Wheel (mouse wheel, needs root)",
-        "Drag (continuous touch drag)"
+        "Touch (follows your finger, needs root)"
     )
 
     private val scrollSensLabels = listOf(
@@ -391,6 +389,7 @@ class SettingsActivity : AppCompatActivity() {
         setupToasts()
         setupQuickToggleSettings()
         setupThemeSpinner()
+        setupCursorAndStatus()
         setupBackupRestore()
         setupAutoKeyboardForText()
         setupHoldKeySettings()
@@ -1069,6 +1068,40 @@ If you’re using something else, look for a “Superuser / SU” permission lis
         spinnerQuickToggleFallback.alpha = if (enabled) 1.0f else 0.5f
 
         tvQuickToggleFallbackLabel.alpha = if (enabled) 1.0f else 0.5f
+    }
+
+    // ---------- Cursor speed + mode notification ----------
+
+    private val cursorSpeedValues = listOf(-6, -3, 0, 3, 6)
+    private val cursorSpeedLabels = listOf("Slowest", "Slow", "Default", "Fast", "Fastest")
+
+    private fun setupCursorAndStatus() {
+        val spinner = findViewById<Spinner>(R.id.spinnerCursorSpeed)
+        val adapter = ArrayAdapter(this, AndroidR.layout.simple_spinner_item, cursorSpeedLabels)
+        adapter.setDropDownViewResource(AndroidR.layout.simple_spinner_dropdown_item)
+        spinner.adapter = adapter
+        val cur = prefs.getCursorSpeed()
+        val idx = cursorSpeedValues.indices.minByOrNull { kotlin.math.abs(cursorSpeedValues[it] - cur) } ?: 2
+        spinner.setSelection(idx, false)
+        spinner.setOnItemSelectedListenerSimple { position ->
+            val v = cursorSpeedValues[position]
+            if (v == prefs.getCursorSpeed()) return@setOnItemSelectedListenerSimple
+            prefs.setCursorSpeed(v)
+            // Android's own pointer speed setting (system-wide); needs root to change.
+            Thread {
+                val ok = RootShell.run("settings put system pointer_speed $v").ok
+                if (!ok) runOnUiThread {
+                    Toast.makeText(this, "Couldn't change cursor speed (root needed)", Toast.LENGTH_SHORT).show()
+                }
+            }.start()
+        }
+
+        val check = findViewById<CheckBox>(R.id.checkModeNotification)
+        check.isChecked = prefs.isModeNotificationEnabled()
+        check.setOnCheckedChangeListener { _, isChecked ->
+            prefs.setModeNotificationEnabled(isChecked)
+            if (!isChecked) NotificationHelper.clearModeStatus(this)
+        }
     }
 
     // ---------- Theme ----------

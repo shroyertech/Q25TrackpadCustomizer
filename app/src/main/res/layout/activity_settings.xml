@@ -364,6 +364,32 @@
                 android:layout_marginTop="8dp"
                 android:layout_marginBottom="12dp"
                 android:background="?android:attr/listDivider" />
+            <!-- Cursor and status -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Mouse cursor speed"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp" />
+            <Spinner
+                android:id="@+id/spinnerCursorSpeed"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp" />
+            <CheckBox
+                android:id="@+id/checkModeNotification"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="Show the current mode in a notification (tap Toggle to switch)"
+                android:textSize="12sp" />
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="12dp"
+                android:background="?android:attr/listDivider" />
             <!-- Text input behavior -->
             <TextView
                 android:id="@+id/tvTextInputBehaviorLabel"
@@ -444,6 +470,14 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:textIsSelectable="true"
+                android:text="Key mapper apps (Key Mapper, Tasker, MacroDroid) can run Quick Toggle without opening anything by sending the broadcast tech.shroyer.q25trackpadcustomizer.QUICK_TOGGLE to package tech.shroyer.q25trackpadcustomizer. The Quick Toggle shortcut (app shortcut / activity) still works too."
+                android:textSize="11sp"
+                android:textColor="?android:attr/textColorSecondary" />
         </LinearLayout>
         <LinearLayout
             android:id="@+id/sectionHold"
@@ -612,8 +646,17 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="4dp" />
+            <TextView
+                android:id="@+id/tvScrollMethodNote"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="Classic: each trackpad tick sends one swipe, like the original app. Touch: the trackpad stays in mouse mode and drives a virtual finger that follows your finger, so the distance matches how far you slide and apps fling naturally (needs root; a press of the pad acts as Enter). Sensitivity sets how far each method moves."
+                android:textSize="11sp"
+                android:textColor="?android:attr/textColorSecondary" />
             <CheckBox
                 android:id="@+id/checkScrollHomeShortcuts"
+                android:visibility="gone"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="4dp"
@@ -650,17 +693,20 @@
             </LinearLayout>
             <TextView
                 android:id="@+id/tvScrollSmoothnessLabel"
+                android:visibility="gone"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Smoothness (Wheel method only)"
                 android:textSize="12sp" />
             <Spinner
                 android:id="@+id/spinnerScrollSmoothness"
+                android:visibility="gone"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="4dp" />
             <CheckBox
                 android:id="@+id/checkScrollAcceleration"
+                android:visibility="gone"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
@@ -668,12 +714,14 @@
                 android:textSize="12sp" />
             <TextView
                 android:id="@+id/tvScrollInertiaLabel"
+                android:visibility="gone"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Inertia: glide after a quick flick (Wheel and Drag methods; Classic uses the app’s own fling)"
                 android:textSize="12sp" />
             <Spinner
                 android:id="@+id/spinnerScrollInertia"
+                android:visibility="gone"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp" />
@@ -812,7 +860,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Tap the pad surface (not the click). Works in every mode; most reliable in Keyboard and Scroll modes, where the pad reports taps directly (in Mouse mode they are guessed from tiny movements). Needs root. The Quick Toggle shortcut still works for key mapper apps. Every gesture is also broadcast as tech.shroyer.q25trackpadcustomizer.PAD_TAP (extra: taps = 2 or 3) for Tasker/MacroDroid, and the F9-F12 actions can be used as Key Mapper triggers. Each app can override these."
+                android:text="Tap the pad surface (not the click). Works in every mode (taps are recognised from the pad’s motion). Needs root. The Quick Toggle shortcut still works for key mapper apps. Every gesture is also broadcast as tech.shroyer.q25trackpadcustomizer.PAD_TAP (extra: taps = 2 or 3) for Tasker/MacroDroid, and the F9-F12 actions can be used as Key Mapper triggers. Each app can override these."
                 android:textSize="11sp"
                 android:textColor="?android:attr/textColorSecondary" />
             <TextView

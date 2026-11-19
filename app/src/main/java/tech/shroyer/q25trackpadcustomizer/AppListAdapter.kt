@@ -287,10 +287,9 @@ class AppListAdapter(
         val globalMethod = prefs.getGlobalScrollSettings().method
         val methodLabelOf = mapOf(
             ScrollMethod.CLASSIC to "Classic (original swipes)",
-            ScrollMethod.WHEEL to "Wheel (mouse wheel, needs root)",
-            ScrollMethod.DRAG to "Drag (continuous touch drag)"
+            ScrollMethod.TOUCH to "Touch (follows your finger, needs root)"
         )
-        val methodOptions = listOf(null, ScrollMethod.CLASSIC, ScrollMethod.WHEEL, ScrollMethod.DRAG)
+        val methodOptions = listOf(null, ScrollMethod.CLASSIC, ScrollMethod.TOUCH)
         val methodLabels = methodOptions.map { m ->
             if (m == null) "Use global (${methodLabelOf[globalMethod]})" else methodLabelOf.getValue(m)
         }

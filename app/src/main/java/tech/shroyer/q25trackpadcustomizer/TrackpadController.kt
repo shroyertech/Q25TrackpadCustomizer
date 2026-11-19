@@ -35,8 +35,15 @@ object TrackpadController {
      * this one runs, this one is dropped (its callback is not invoked) and the newer one wins.
      * [onResult] runs on the main thread with whether the hardware now matches.
      */
+    /**
+     * Optional hardware value override, set by the service: Scroll wheel mode with the Touch
+     * method keeps the hardware in mouse mode ("0") so the pad reports fine motion.
+     */
+    @Volatile
+    var procValueOverride: ((Mode) -> String?)? = null
+
     fun requestMode(mode: Mode, onResult: ((Boolean) -> Unit)? = null) {
-        val procValue = mode.procValue
+        val procValue = procValueOverride?.invoke(mode) ?: mode.procValue
         if (procValue == null) {
             onResult?.let { cb -> mainHandler.post { cb(false) } }
             return
