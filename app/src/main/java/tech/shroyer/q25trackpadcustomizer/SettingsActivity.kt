@@ -254,6 +254,14 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.tvSettingsTitle).setOnClickListener {
             if (openSectionId != 0) showSection(0)
         }
+        // The app theme turns Buttons into MaterialButtons, which ignore drawableStart:
+        // set the heart as the button icon, keeping its own red colour.
+        (findViewById<View>(R.id.btnDonate) as? com.google.android.material.button.MaterialButton)?.apply {
+            setIconResource(R.drawable.ic_heart_24)
+            iconTint = null
+            iconGravity = com.google.android.material.button.MaterialButton.ICON_GRAVITY_TEXT_START
+            iconPadding = (8 * resources.displayMetrics.density).toInt()
+        }
         findViewById<View>(R.id.btnDonate).setOnClickListener {
             try {
                 startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(DONATE_URL)))
