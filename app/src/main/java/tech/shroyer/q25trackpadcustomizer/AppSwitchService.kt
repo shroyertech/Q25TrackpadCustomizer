@@ -339,6 +339,11 @@ class AppSwitchService : AccessibilityService() {
         val notches = settings.sensitivity.wheelNotches
         val useWheel = settings.method == ScrollMethod.WHEEL
 
+        if (settings.method == ScrollMethod.CLASSIC) {
+            classicScroll(event.keyCode, settings, steps)
+            return
+        }
+
         val isVertical = event.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
                 event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN
         if (isVertical && useWheel && handleHomeScreenFlick(event.keyCode, pkg)) return
@@ -364,6 +369,42 @@ class AppSwitchService : AccessibilityService() {
                     scrollHorizontal(scrollLeft, steps, notches, useWheel)
                 }
             }
+        }
+    }
+
+    /**
+     * The original scroll behaviour, unchanged from the first releases: every tick sends
+     * one fixed swipe (15% of the screen per step, 120 ms per step) through the middle of
+     * the screen. A new tick replaces the swipe still in progress, and the app's own fling
+     * takes over when the ticks stop.
+     */
+    private fun classicScroll(keyCode: Int, settings: ScrollSettings, steps: Int) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) scrollEngine?.cancel()
+        when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP -> classicVertical(!settings.invertVertical, steps)
+            KeyEvent.KEYCODE_DPAD_DOWN -> classicVertical(settings.invertVertical, steps)
+            KeyEvent.KEYCODE_DPAD_LEFT ->
+                if (settings.horizontalEnabled) classicHorizontal(!settings.invertHorizontal, steps)
+            KeyEvent.KEYCODE_DPAD_RIGHT ->
+                if (settings.horizontalEnabled) classicHorizontal(settings.invertHorizontal, steps)
+        }
+    }
+
+    private fun classicVertical(up: Boolean, steps: Int) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            val ok = performVerticalGesture(up, steps)
+            if (!ok) scrollVerticalNodeBased(up, steps)
+        } else {
+            scrollVerticalNodeBased(up, steps)
+        }
+    }
+
+    private fun classicHorizontal(left: Boolean, steps: Int) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            val ok = performHorizontalGesture(left, steps)
+            if (!ok) scrollHorizontalNodeBased(left, steps)
+        } else {
+            scrollHorizontalNodeBased(left, steps)
         }
     }
 

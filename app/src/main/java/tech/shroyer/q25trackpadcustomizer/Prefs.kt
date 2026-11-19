@@ -530,7 +530,7 @@ class Prefs(context: Context) {
         val horizontal = prefs.getBoolean(KEY_SCROLL_GLOBAL_HORIZONTAL, false)
         val invertV = prefs.getBoolean(KEY_SCROLL_GLOBAL_INV_V, false)
         val invertH = prefs.getBoolean(KEY_SCROLL_GLOBAL_INV_H, false)
-        val method = ScrollMethod.fromPrefValue(prefs.getInt(KEY_SCROLL_GLOBAL_METHOD, ScrollMethod.WHEEL.prefValue))
+        val method = ScrollMethod.fromPrefValue(prefs.getInt(KEY_SCROLL_GLOBAL_METHOD, ScrollMethod.CLASSIC.prefValue))
         return ScrollSettings(
             sensitivity = sens,
             horizontalEnabled = horizontal,
@@ -664,8 +664,17 @@ class Prefs(context: Context) {
         prefs.edit().putBoolean(keyScrollAppInvH(packageName), invert).apply()
     }
 
-    fun setAppScrollMethod(packageName: String, method: ScrollMethod) {
-        prefs.edit().putInt(keyScrollAppMethod(packageName), method.prefValue).apply()
+    /** null = use the global scroll method. */
+    fun setAppScrollMethod(packageName: String, method: ScrollMethod?) {
+        val e = prefs.edit()
+        if (method == null) e.remove(keyScrollAppMethod(packageName))
+        else e.putInt(keyScrollAppMethod(packageName), method.prefValue)
+        e.apply()
+    }
+
+    fun getAppScrollMethodOverride(packageName: String): ScrollMethod? {
+        val k = keyScrollAppMethod(packageName)
+        return if (prefs.contains(k)) ScrollMethod.fromPrefValue(prefs.getInt(k, 0)) else null
     }
 
     // ---- Edge auto-scroll (experimental) ----
@@ -901,7 +910,7 @@ class Prefs(context: Context) {
         private const val KEY_SCROLL_GLOBAL_INV_H = "scroll_global_inv_h"
         private const val KEY_SCROLL_GLOBAL_ACCEL = "scroll_global_accel"
         private const val KEY_SCROLL_GLOBAL_SMOOTHNESS = "scroll_global_smoothness"
-        private const val KEY_SCROLL_GLOBAL_METHOD = "scroll_global_method"
+        private const val KEY_SCROLL_GLOBAL_METHOD = "scroll_global_method_v2"
         private const val KEY_SCROLL_HOME_SHORTCUTS = "scroll_home_shortcuts"
         private const val KEY_SCROLL_GLOBAL_INERTIA = "scroll_global_inertia"
 
@@ -932,7 +941,7 @@ class Prefs(context: Context) {
         private fun keyScrollAppHorizontal(pkg: String) = "scroll_app_horizontal_$pkg"
         private fun keyScrollAppInvV(pkg: String) = "scroll_app_inv_v_$pkg"
         private fun keyScrollAppInvH(pkg: String) = "scroll_app_inv_h_$pkg"
-        private fun keyScrollAppMethod(pkg: String) = "scroll_app_method_$pkg"
+        private fun keyScrollAppMethod(pkg: String) = "scroll_app_method_v2_$pkg"
 
         const val DEFAULT_HOLD_KEYCODE = 59 // KEYCODE_SHIFT_LEFT
         const val DEFAULT_HOLD2_KEYCODE = 60 // KEYCODE_SHIFT_RIGHT

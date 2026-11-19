@@ -96,11 +96,34 @@ class AppListAdapter(
         }
     }
 
+    /** Each section of the app settings dialog opens/closes when its header is tapped. */
+    private fun setupCollapsibleSections(root: View) {
+        val sections = listOf(
+            R.id.appSecHdrQuickToggle to R.id.appSecBodyQuickToggle,
+            R.id.appSecHdrHold1 to R.id.appSecBodyHold1,
+            R.id.appSecHdrHold2 to R.id.appSecBodyHold2,
+            R.id.appSecHdrScroll to R.id.appSecBodyScroll,
+            R.id.appSecHdrExperimental to R.id.appSecBodyExperimental,
+            R.id.appSecHdrAutoKeyboard to R.id.appSecBodyAutoKeyboard
+        )
+        for ((hdrId, bodyId) in sections) {
+            val hdr = root.findViewById<TextView>(hdrId)
+            val body = root.findViewById<View>(bodyId)
+            val title = hdr.text.toString().removePrefix("▸").trim()
+            hdr.setOnClickListener {
+                val open = body.visibility != View.VISIBLE
+                body.visibility = if (open) View.VISIBLE else View.GONE
+                hdr.text = (if (open) "▾  " else "▸  ") + title
+            }
+        }
+    }
+
     private fun showAppSettingsDialog(app: AppItem) {
         val dialogView = LayoutInflater.from(context)
             .inflate(R.layout.dialog_app_scroll_settings, null)
 
         val tvTitle = dialogView.findViewById<TextView>(R.id.tvScrollDialogTitle)
+        setupCollapsibleSections(dialogView)
 
         // Quick Toggle (per-app)
         val checkQtUseGlobal = dialogView.findViewById<CheckBox>(R.id.checkAppQuickToggleUseGlobal)
@@ -261,8 +284,16 @@ class AppListAdapter(
         }
         spinnerSens.adapter = sensAdapter
 
-        val methodLabels = listOf("Wheel (smooth, needs root)", "Drag (touch swipes)")
-        val methodOptions = listOf(ScrollMethod.WHEEL, ScrollMethod.DRAG)
+        val globalMethod = prefs.getGlobalScrollSettings().method
+        val methodLabelOf = mapOf(
+            ScrollMethod.CLASSIC to "Classic (original swipes)",
+            ScrollMethod.WHEEL to "Wheel (mouse wheel, needs root)",
+            ScrollMethod.DRAG to "Drag (continuous touch drag)"
+        )
+        val methodOptions = listOf(null, ScrollMethod.CLASSIC, ScrollMethod.WHEEL, ScrollMethod.DRAG)
+        val methodLabels = methodOptions.map { m ->
+            if (m == null) "Use global (${methodLabelOf[globalMethod]})" else methodLabelOf.getValue(m)
+        }
         spinnerMethod.adapter = ArrayAdapter(
             context,
             android.R.layout.simple_spinner_item,
@@ -273,7 +304,7 @@ class AppListAdapter(
 
         val effectiveScroll = prefs.getEffectiveScrollSettings(app.packageName)
         spinnerSens.setSelection(sensOptions.indexOf(effectiveScroll.sensitivity).coerceAtLeast(0), false)
-        spinnerMethod.setSelection(methodOptions.indexOf(effectiveScroll.method).coerceAtLeast(0), false)
+        spinnerMethod.setSelection(methodOptions.indexOf(prefs.getAppScrollMethodOverride(app.packageName)).coerceAtLeast(0), false)
         checkHorizontal.isChecked = effectiveScroll.horizontalEnabled
         checkInvertV.isChecked = effectiveScroll.invertVertical
         checkInvertH.isChecked = effectiveScroll.invertHorizontal

@@ -45,16 +45,20 @@ enum class ScrollInertia(val prefValue: Int, val level: Int) {
 }
 
 // How scroll-wheel mode moves content.
+// CLASSIC: the original behaviour: each trackpad tick sends one fixed touch swipe from the
+//          middle of the screen (a new tick replaces the swipe in progress), and the app's
+//          own fling physics do the rest. Consistent, and needs no root.
 // WHEEL: real mouse-wheel events through the root helper (falls back to DRAG without root).
 // DRAG: simulated finger drags. Apps see touch swipes, so swipe gestures (e.g. a launcher's
 //       swipe-up app drawer) work, but lists can hit edge gestures.
 enum class ScrollMethod(val prefValue: Int) {
     WHEEL(0),
-    DRAG(1);
+    DRAG(1),
+    CLASSIC(2);
 
     companion object {
         fun fromPrefValue(value: Int): ScrollMethod {
-            return values().firstOrNull { it.prefValue == value } ?: WHEEL
+            return values().firstOrNull { it.prefValue == value } ?: CLASSIC
         }
     }
 }
@@ -65,5 +69,5 @@ data class ScrollSettings(
     val horizontalEnabled: Boolean,
     val invertVertical: Boolean,
     val invertHorizontal: Boolean,
-    val method: ScrollMethod = ScrollMethod.WHEEL
+    val method: ScrollMethod = ScrollMethod.CLASSIC
 )

@@ -15,6 +15,7 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.View
 import android.view.ViewGroup
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
@@ -161,13 +162,15 @@ class SettingsActivity : AppCompatActivity() {
     )
 
     private val scrollMethodOptions = listOf(
+        ScrollMethod.CLASSIC,
         ScrollMethod.WHEEL,
         ScrollMethod.DRAG
     )
 
     private val scrollMethodLabels = listOf(
-        "Wheel (smooth, needs root)",
-        "Drag (touch swipes)"
+        "Classic (original swipes)",
+        "Wheel (mouse wheel, needs root)",
+        "Drag (continuous touch drag)"
     )
 
     private val scrollSensLabels = listOf(
@@ -230,6 +233,69 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
+    // ---------- Section navigation ----------
+    //
+    // The settings page opens on a short menu; each entry shows one section of the
+    // settings (the other sections are hidden). Back returns to the menu.
+
+    private val sectionIds = linkedMapOf(
+        R.id.menuGeneral to (R.id.sectionGeneral to "General"),
+        R.id.menuQuickToggle to (R.id.sectionQuickToggle to "Quick Toggle"),
+        R.id.menuHold to (R.id.sectionHold to "Hold-key switching"),
+        R.id.menuScroll to (R.id.sectionScroll to "Scrolling"),
+        R.id.menuExperimental to (R.id.sectionExperimental to "Gestures & edge scroll"),
+        R.id.menuExcluded to (R.id.sectionExcluded to "Excluded apps"),
+        R.id.menuAbout to (R.id.sectionAbout to "Backup, updates & about")
+    )
+    private var openSectionId = 0
+
+    private fun setupSectionNavigation(savedInstanceState: Bundle?) {
+        for ((menuId, target) in sectionIds) {
+            findViewById<View>(menuId).setOnClickListener { showSection(target.first) }
+        }
+        findViewById<TextView>(R.id.tvSettingsTitle).setOnClickListener {
+            if (openSectionId != 0) showSection(0)
+        }
+        findViewById<View>(R.id.btnDonate).setOnClickListener {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(DONATE_URL)))
+            } catch (_: Exception) {
+                Toast.makeText(this, "No browser found", Toast.LENGTH_SHORT).show()
+            }
+        }
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (openSectionId != 0) {
+                    showSection(0)
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        })
+        showSection(savedInstanceState?.getInt(STATE_SECTION, 0) ?: 0)
+    }
+
+    /** Show one section (0 = the menu). */
+    private fun showSection(sectionId: Int) {
+        openSectionId = sectionId
+        findViewById<View>(R.id.sectionMenu).visibility = if (sectionId == 0) View.VISIBLE else View.GONE
+        var title = "Settings"
+        for ((_, target) in sectionIds) {
+            val (id, name) = target
+            val show = id == sectionId
+            findViewById<View>(id).visibility = if (show) View.VISIBLE else View.GONE
+            if (show) title = "‹  $name"
+        }
+        findViewById<TextView>(R.id.tvSettingsTitle).text = title
+        findViewById<android.widget.ScrollView>(R.id.scrollSettingsRoot).scrollTo(0, 0)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putInt(STATE_SECTION, openSectionId)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         Prefs.applyThemeFromPrefs(this)
         super.onCreate(savedInstanceState)
@@ -240,6 +306,8 @@ class SettingsActivity : AppCompatActivity() {
         // Header
         tvSettingsVersion = findViewById(R.id.tvSettingsVersion)
         tvSettingsVersion.text = "v${getAppVersionName()}"
+
+        setupSectionNavigation(savedInstanceState)
 
         // Initial setup buttons
         btnTestRootAccess = findViewById(R.id.btnTestRootAccess)
@@ -1789,6 +1857,8 @@ If you’re using something else, look for a “Superuser / SU” permission lis
     }
 
     companion object {
+        private const val STATE_SECTION = "open_section"
+        private const val DONATE_URL = "https://give.wvu.edu/give/430764/#!/donation/checkout"
         private const val SETUP_PREFS = "setup_state"
         const val KEY_ROOT_GRANTED = "root_granted"
 
