@@ -11,8 +11,28 @@ android {
         applicationId = "tech.shroyer.q25trackpadcustomizer"
         minSdk = 21
         targetSdk = 34
-        versionCode = 17
-        versionName = "1.4.18"
+        versionCode = 18
+        versionName = "1.4.19"
+
+        // The Q25 is arm64; the native touch-scroll helper is built for it only.
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
+    }
+
+    // Native touch-scroll helper (an executable, packaged as libq25touch.so).
+    ndkVersion = "27.2.12479018"
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+        }
+    }
+
+    // Extract native libraries to disk so the helper can be executed from there.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 
     // Fixed debug key checked into the repo, so every debug build (local or CI) is signed

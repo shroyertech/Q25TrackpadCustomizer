@@ -22,6 +22,10 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon assembleDebug
 
+      - name: Check the native helper is packaged
+        run: |
+          unzip -l app/build/outputs/apk/debug/*.apk | grep "lib/arm64-v8a/libq25touch.so"
+
       - uses: actions/upload-artifact@v4
         with:
           name: q25-trackpad-customizer-debug-${{ github.sha }}
