@@ -1320,6 +1320,7 @@ class AppSwitchService : AccessibilityService() {
                 else "Listening for taps on $devs"
                 android.util.Log.i("Q25PadTap", "helper: $line")
             }
+            line.startsWith("touch ") -> android.util.Log.i("Q25Touch", "helper: $line")
             line.startsWith("tap ") -> {
                 val n = line.removePrefix("tap ").trim().toIntOrNull() ?: return
                 handlePadTaps(n)
