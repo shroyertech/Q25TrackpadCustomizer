@@ -264,6 +264,19 @@ class SettingsActivity : AppCompatActivity() {
                 Toast.makeText(this, "No browser found", Toast.LENGTH_SHORT).show()
             }
         }
+        (findViewById<View>(R.id.btnMawmaw) as? com.google.android.material.button.MaterialButton)?.apply {
+            setIconResource(R.drawable.ic_book_24)
+            iconTint = null
+            iconGravity = com.google.android.material.button.MaterialButton.ICON_GRAVITY_TEXT_START
+            iconPadding = (8 * resources.displayMetrics.density).toInt()
+        }
+        findViewById<View>(R.id.btnMawmaw).setOnClickListener {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(MAWMAW_URL)))
+            } catch (_: Exception) {
+                Toast.makeText(this, "No browser found", Toast.LENGTH_SHORT).show()
+            }
+        }
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (openSectionId != 0) {
@@ -1888,6 +1901,7 @@ If you’re using something else, look for a “Superuser / SU” permission lis
     companion object {
         private const val STATE_SECTION = "open_section"
         private const val DONATE_URL = "https://give.wvu.edu/give/430764/#!/donation/checkout"
+        private const val MAWMAW_URL = "https://mawmawsbooks.org"
         private const val SETUP_PREFS = "setup_state"
         const val KEY_ROOT_GRANTED = "root_granted"
 

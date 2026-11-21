@@ -250,6 +250,20 @@
                 android:text="Donate to WVU Cancer Center"
                 android:drawableStart="@drawable/ic_heart_24"
                 android:drawablePadding="8dp" />
+            <Button
+                android:id="@+id/btnMawmaw"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Support Mawmaw's Books" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="Books and computers can be mailed to the store addresses on the website, ATTN: Mawmaw's Books."
+                android:textSize="11sp"
+                android:textColor="?android:attr/textColorSecondary"
+                android:layout_marginBottom="8dp" />
         </LinearLayout>
         <LinearLayout
             android:id="@+id/sectionGeneral"
