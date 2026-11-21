@@ -257,6 +257,21 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:visibility="gone">
+            <!-- Per-app settings switch -->
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/switchPerApp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Per-app settings"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Off: every app uses the default mode and the global settings, and the app stops watching which app is open. Your per-app choices are kept for when you turn this back on."
+                android:textSize="11sp"
+                android:textColor="?android:attr/textColorSecondary"
+                android:layout_marginBottom="10dp" />
             <!-- Initial Setup -->
             <TextView
                 android:id="@+id/tvInitialSetupLabel"

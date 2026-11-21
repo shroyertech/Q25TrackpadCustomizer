@@ -11,8 +11,8 @@ android {
         applicationId = "tech.shroyer.q25trackpadcustomizer"
         minSdk = 21
         targetSdk = 34
-        versionCode = 22
-        versionName = "1.4.23"
+        versionCode = 23
+        versionName = "1.4.24"
 
         // The Q25 is arm64; the native touch-scroll helper is built for it only.
         ndk {

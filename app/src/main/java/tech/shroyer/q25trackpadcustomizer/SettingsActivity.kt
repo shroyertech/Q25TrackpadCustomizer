@@ -1126,6 +1126,10 @@ If you’re using something else, look for a “Superuser / SU” permission lis
             prefs.setModeNotificationEnabled(isChecked)
             if (!isChecked) NotificationHelper.clearModeStatus(this)
         }
+
+        val perApp = findViewById<CompoundButton>(R.id.switchPerApp)
+        perApp.isChecked = prefs.isPerAppEnabled()
+        perApp.setOnCheckedChangeListener { _, isChecked -> prefs.setPerAppEnabled(isChecked) }
     }
 
     // ---------- Theme ----------

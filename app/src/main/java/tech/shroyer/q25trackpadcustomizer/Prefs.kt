@@ -65,6 +65,14 @@ class Prefs(context: Context) {
 
     fun setCursorSpeed(v: Int) = prefs.edit().putInt(KEY_CURSOR_SPEED, v.coerceIn(-7, 7)).apply()
 
+    /**
+     * Per-app settings on/off. Off = every app uses the default mode and the global settings,
+     * and the service stops tracking which app is in front.
+     */
+    fun isPerAppEnabled(): Boolean = prefs.getBoolean(KEY_PER_APP, true)
+
+    fun setPerAppEnabled(v: Boolean) = prefs.edit().putBoolean(KEY_PER_APP, v).apply()
+
     fun isModeNotificationEnabled(): Boolean = prefs.getBoolean(KEY_MODE_NOTIFICATION, false)
 
     fun setModeNotificationEnabled(v: Boolean) = prefs.edit().putBoolean(KEY_MODE_NOTIFICATION, v).apply()
@@ -804,7 +812,7 @@ class Prefs(context: Context) {
     companion object {
         private const val PREFS_NAME = "q25_prefs"
 
-        private const val KEY_SYSTEM_DEFAULT_MODE = "system_default_mode"
+        const val KEY_SYSTEM_DEFAULT_MODE = "system_default_mode"
         private const val KEY_LAST_KNOWN_MODE = "last_known_mode"
 
         private const val PREFIX_APP_MODE = "app_mode_"
@@ -812,6 +820,7 @@ class Prefs(context: Context) {
 
         private const val KEY_CURSOR_SPEED = "cursor_speed"
         private const val KEY_MODE_NOTIFICATION = "mode_notification"
+        const val KEY_PER_APP = "per_app_enabled"
         private const val KEY_TOAST_QUICK_TOGGLE = "toast_quick_toggle"
         private const val KEY_TOAST_PER_APP = "toast_per_app"
         private const val KEY_TOAST_DEFAULT_MODE = "toast_default_mode"

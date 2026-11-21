@@ -73,7 +73,22 @@ class AppSwitchService : AccessibilityService() {
         }
     }
 
+    // Per-app settings switch (cached: read on every window event).
+    @Volatile
+    private var perAppEnabled = true
+
     private val prefListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == null || key == Prefs.KEY_PER_APP) {
+            mainHandler.post { onPerAppSwitchChanged() }
+        }
+        if (key == Prefs.KEY_SYSTEM_DEFAULT_MODE && !perAppEnabled) {
+            // No app switches to pick it up: apply the new default right away.
+            mainHandler.post {
+                if (!AppState.textInputOverrideActive && !hold1.active && !hold2.active) {
+                    applyMode(prefs.getSystemDefaultMode())
+                }
+            }
+        }
         if (key == null || key.startsWith(Prefs.EDGE_KEY_PREFIX)) {
             mainHandler.post { edgeScroller.refresh() }
         }
@@ -227,6 +242,7 @@ class AppSwitchService : AccessibilityService() {
         // Open the root shell now so the first real switch doesn't pay for it.
         TrackpadController.warmUp()
 
+        perAppEnabled = prefs.isPerAppEnabled()
         prefs.registerListener(prefListener)
         TrackpadController.procValueOverride = { mode ->
             if (mode == Mode.SCROLL_WHEEL && touchScrollWanted(mode)) "0" else null
@@ -237,8 +253,40 @@ class AppSwitchService : AccessibilityService() {
         wheelInjector.onHelperLine = { line -> onHelperLine(line) }
 
         // Apply the right mode for whatever is already on screen (e.g. after the service
-        // was restarted), instead of waiting for the next app switch.
-        mainHandler.postDelayed(foregroundVerifyRunnable, 300L)
+        // was restarted), instead of waiting for the next app switch. With per-app settings
+        // off, just apply the default mode once.
+        perAppEnabled = prefs.isPerAppEnabled()
+        if (perAppEnabled) {
+            mainHandler.postDelayed(foregroundVerifyRunnable, 300L)
+        } else {
+            mainHandler.postDelayed({ applyMode(prefs.getSystemDefaultMode()) }, 300L)
+        }
+    }
+
+    /** Per-app settings switched on/off in Settings. */
+    private fun onPerAppSwitchChanged() {
+        val on = prefs.isPerAppEnabled()
+        if (on == perAppEnabled) return
+        perAppEnabled = on
+        android.util.Log.i("Q25Mode", "per-app settings ${if (on) "on" else "off"}")
+        lastAppliedPackage = null
+        lastAppliedMode = null
+        AppState.manualOverrideForPackage = null
+        if (on) {
+            mainHandler.postDelayed(foregroundVerifyRunnable, 100L)
+        } else {
+            // Forget the app in front: everything below then uses the global settings.
+            mainHandler.removeCallbacks(foregroundVerifyRunnable)
+            AppState.currentForegroundPackage = null
+            if (!AppState.textInputOverrideActive && !hold1.active && !hold2.active) {
+                val def = prefs.getSystemDefaultMode()
+                prefs.setLastKnownMode(def)
+                applyMode(def)
+            }
+            edgeScroller.onWindowsChanged()
+            syncTouchScroll()
+            updateModeNotification()
+        }
     }
 
     override fun onDestroy() {
@@ -280,8 +328,10 @@ class AppSwitchService : AccessibilityService() {
                     return
                 }
 
-                lastWindowStateChangeUptime = SystemClock.uptimeMillis()
-                handleForegroundAppChanged(pkg)
+                if (perAppEnabled) {
+                    lastWindowStateChangeUptime = SystemClock.uptimeMillis()
+                    handleForegroundAppChanged(pkg)
+                }
                 scheduleContentCheck()
             }
 
@@ -304,7 +354,7 @@ class AppSwitchService : AccessibilityService() {
 
             AccessibilityEvent.TYPE_WINDOWS_CHANGED -> {
                 edgeScroller.onWindowsChanged()
-                if (isActiveWindowChange(event)) scheduleForegroundVerify()
+                if (perAppEnabled && isActiveWindowChange(event)) scheduleForegroundVerify()
                 scheduleContentCheck()
             }
 
@@ -1669,6 +1719,7 @@ class AppSwitchService : AccessibilityService() {
      * window and switch if it belongs to a different app than the one we think is in front.
      */
     private fun verifyForegroundFromActiveWindow() {
+        if (!perAppEnabled) return
         // A real window-state event just arrived; it is more reliable than the window list,
         // which can briefly lag behind during transitions.
         val sinceStateChange = SystemClock.uptimeMillis() - lastWindowStateChangeUptime

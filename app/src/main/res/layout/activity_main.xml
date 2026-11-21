@@ -47,6 +47,7 @@
 
     <!-- Set all apps to... -->
     <LinearLayout
+        android:id="@+id/rowSetAll"
         android:orientation="horizontal"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -83,6 +84,16 @@
         android:textStyle="bold"
         android:textSize="14sp"
         android:layout_marginBottom="2dp" />
+
+    <TextView
+        android:id="@+id/tvPerAppOff"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Per-app settings are off, so every app uses the default mode above. Turn them on in Settings › General."
+        android:textSize="13sp"
+        android:textColor="?android:attr/textColorSecondary"
+        android:layout_marginTop="8dp"
+        android:visibility="gone" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerApps"

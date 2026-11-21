@@ -139,12 +139,25 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Hide the per-app list when per-app settings are turned off in Settings. */
+    private fun applyPerAppVisibility() {
+        val on = prefs.isPerAppEnabled()
+        val v = if (on) android.view.View.VISIBLE else android.view.View.GONE
+        findViewById<android.view.View>(R.id.rowSetAll).visibility = v
+        editSearch.visibility = v
+        findViewById<android.view.View>(R.id.tvPerAppLabel).visibility = v
+        recyclerApps.visibility = v
+        findViewById<android.view.View>(R.id.tvPerAppOff).visibility =
+            if (on) android.view.View.GONE else android.view.View.VISIBLE
+    }
+
     override fun onResume() {
         super.onResume()
 
         // Re-sync global UI from prefs
         refreshSystemDefaultSpinnerFromPrefs()
         refreshAppList(editSearch.text?.toString().orEmpty())
+        applyPerAppVisibility()
 
         // If the user is mid-accessibility wizard, continue it and skip other prompts.
         if (maybeContinueAccessibilityWizard()) {
