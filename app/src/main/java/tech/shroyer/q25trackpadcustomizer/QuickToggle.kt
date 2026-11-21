@@ -35,25 +35,46 @@ object QuickToggle {
             singleMatchFallback = singleMatchFallback
         )
 
+        android.util.Log.i("Q25Mode", "quickToggle $currentLogical -> $nextMode fg=$targetPackage")
+        switchTo(context, prefs, nextMode)
+
+        return nextMode
+    }
+
+    /**
+     * Switch straight to [mode] (the mode notification's buttons and the SET_MODE broadcast).
+     * Like Quick Toggle, it counts as a manual choice for the app in front.
+     */
+    fun setMode(context: Context, mode: Mode) {
+        if (mode == Mode.FOLLOW_SYSTEM) return
+        val prefs = Prefs(context)
+        val targetPackage = AppState.currentForegroundPackage
+        if (!targetPackage.isNullOrEmpty()) {
+            AppState.manualOverrideForPackage = targetPackage
+        }
+        android.util.Log.i("Q25Mode", "setMode ${AppState.currentMode} -> $mode fg=$targetPackage")
+        switchTo(context, prefs, mode)
+    }
+
+    private fun switchTo(context: Context, prefs: Prefs, target: Mode) {
         // Update logical state right away and write the hardware in the background, so this
         // (invisible) activity never blocks on root. Explicit user action: retry root now even
         // if a previous attempt failed recently.
         val previousMode = AppState.currentMode
-        android.util.Log.i("Q25Mode", "quickToggle $currentLogical -> $nextMode fg=$targetPackage")
-        AppState.currentMode = nextMode
-        prefs.setLastKnownMode(nextMode)
+        AppState.currentMode = target
+        prefs.setLastKnownMode(target)
 
         val appContext = context.applicationContext ?: context
         val showToast = prefs.isToastQuickToggleEnabled()
         RootShell.resetBackoff()
-        TrackpadController.requestMode(nextMode) { ok ->
+        TrackpadController.requestMode(target) { ok ->
             if (ok) {
                 NotificationHelper.clearRootError(appContext)
                 if (showToast) {
-                    ToastHelper.show(appContext, "Toggled to ${modeLabel(nextMode)} Mode!")
+                    ToastHelper.show(appContext, "Toggled to ${modeLabel(target)} Mode!")
                 }
             } else {
-                if (AppState.currentMode == nextMode) {
+                if (AppState.currentMode == target) {
                     AppState.currentMode = previousMode
                     prefs.setLastKnownMode(previousMode)
                 }
@@ -64,7 +85,6 @@ object QuickToggle {
             }
         }
 
-        return nextMode
     }
 
     private fun computeNextQuickToggleMode(

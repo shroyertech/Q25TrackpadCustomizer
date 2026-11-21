@@ -411,7 +411,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
-                android:text="Show the current mode in a notification (tap Toggle to switch)"
+                android:text="Show the current mode in a notification, with buttons to pick a mode"
                 android:textSize="12sp" />
             <View
                 android:layout_width="match_parent"
@@ -504,7 +504,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:textIsSelectable="true"
-                android:text="Key mapper apps (Key Mapper, Tasker, MacroDroid) can run Quick Toggle without opening anything by sending the broadcast tech.shroyer.q25trackpadcustomizer.QUICK_TOGGLE to package tech.shroyer.q25trackpadcustomizer. The Quick Toggle shortcut (app shortcut / activity) still works too."
+                android:text="Key mapper apps (Key Mapper, Tasker, MacroDroid) can run Quick Toggle without opening anything by sending the broadcast tech.shroyer.q25trackpadcustomizer.QUICK_TOGGLE to package tech.shroyer.q25trackpadcustomizer. To pick a mode directly, send tech.shroyer.q25trackpadcustomizer.SET_MODE with the extra mode = mouse, keyboard or scroll. The Quick Toggle shortcut (app shortcut / activity) still works too."
                 android:textSize="11sp"
                 android:textColor="?android:attr/textColorSecondary" />
         </LinearLayout>

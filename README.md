@@ -20,7 +20,7 @@ This app is free and always will be. I don't take personal donations. If it's ma
 - Quick Toggle Activity - Includes an App Shortcut which can be called upon by KeyMapper app to cycle through available modes
   - Select which modes Quick Toggle cycles through (Global + Per-App)
   - Single-Mode Fallback (when only 1 mode is selected)
-- Optional notification showing the current mode, with a Toggle button
+- Optional notification showing the current mode, with buttons to pick Mouse, Keyboard or Scroll
 - Cursor speed setting and a Diagnostics page (with copy button for bug reports)
 - Backup & restore settings
 - Initial setup helpers (Settings page)

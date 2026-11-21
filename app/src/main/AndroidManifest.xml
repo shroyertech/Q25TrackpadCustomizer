@@ -65,6 +65,7 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="tech.shroyer.q25trackpadcustomizer.QUICK_TOGGLE" />
+                <action android:name="tech.shroyer.q25trackpadcustomizer.SET_MODE" />
             </intent-filter>
         </receiver>
 
