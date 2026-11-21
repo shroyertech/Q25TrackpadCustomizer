@@ -22,6 +22,20 @@ class TouchScrollProcess(
     @Synchronized
     fun start(cmd: List<String>) {
         if (process != null && args == cmd) return
+        // Only speed / direction changed: tell the running program instead of restarting it,
+        // so the trackpad is never released in between.
+        val p0 = process
+        val a0 = args
+        if (p0 != null && a0 != null && a0.size == cmd.size && cmd.size >= 8 && a0.subList(0, 4) == cmd.subList(0, 4)) {
+            try {
+                p0.outputStream.write("s ${cmd[4]} ${cmd[5]} ${cmd[6]} ${cmd[7]}\n".toByteArray())
+                p0.outputStream.flush()
+                args = cmd
+                return
+            } catch (_: Throwable) {
+                // fall through to a restart
+            }
+        }
         stopLocked()
         val p = try {
             ProcessBuilder(cmd).redirectErrorStream(false).start()

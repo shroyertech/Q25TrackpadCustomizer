@@ -47,6 +47,10 @@
 #define IDLE_LIFT_MS 45
 /* Keep the virtual finger this far from the screen edges; re-grab in the middle. */
 #define EDGE_MARGIN_RATIO 0.12f
+/* A new drag starts this far in from the side it moves away from. It used to start at the
+ * edge margin, which at the top of the screen is the status bar / toolbar: the touch landed
+ * on those instead of the content, so scrolling one way often did nothing. */
+#define START_RATIO 0.28f
 /* Opposite-direction travel needed before the finger turns around. Single reports the
  * other way are pad noise; reacting to each one restarted the drag on every report and the
  * app never got past its touch slop, so scrolling back stopped working. */
@@ -133,7 +137,7 @@ static void touch_up(void) {
 
 /* Where a new drag starts: away from the side it is heading to, so it has room to travel. */
 static void start_point(int dx, int dy, int *sx, int *sy) {
-    int mx = (int)(W * EDGE_MARGIN_RATIO), my = (int)(H * EDGE_MARGIN_RATIO);
+    int mx = (int)(W * START_RATIO), my = (int)(H * START_RATIO);
     *sx = W / 2;
     *sy = H / 2;
     if (abs(dy) >= abs(dx)) {
@@ -357,6 +361,8 @@ int main(int argc, char **argv) {
     out("ok %d %d\n", W, H);
 
     long ignore_until = now_ms() + STARTUP_IGNORE_MS;
+    char cmd[96];
+    int cmd_len = 0;
     int pdx = 0, pdy = 0, scan = -1;
     struct pollfd pf[2];
     pf[0].fd = g_in;
@@ -369,9 +375,27 @@ int main(int argc, char **argv) {
         int r = poll(pf, 2, timeout);
         if (r < 0 && errno != EINTR) break;
         if (pf[1].revents & (POLLIN | POLLHUP | POLLERR)) {
-            char b[64];
+            char b[128];
             ssize_t n = read(STDIN_FILENO, b, sizeof(b));
             if (n <= 0) break; /* parent went away */
+            /* "s scale horizontal invertV invertH": new settings without restarting, so the
+             * trackpad is never released (a released pad shows the mouse cursor). */
+            for (ssize_t i = 0; i < n; i++) {
+                char c = b[i];
+                if (c == '\n') {
+                    cmd[cmd_len] = 0;
+                    float sc; int h, iv, ih;
+                    if (sscanf(cmd, "s %f %d %d %d", &sc, &h, &iv, &ih) == 4 && sc > 0.f) {
+                        SCALE = sc; HORIZ = h != 0; INV_V = iv != 0; INV_H = ih != 0;
+                        touch_up();
+                        LOGI("settings scale %.2f h %d iv %d ih %d", SCALE, HORIZ, INV_V, INV_H);
+                        out("g config %d %d\n", (int)(SCALE * 100), HORIZ);
+                    }
+                    cmd_len = 0;
+                } else if (cmd_len < (int)sizeof(cmd) - 1) {
+                    cmd[cmd_len++] = c;
+                }
+            }
         }
         if (pf[0].revents & (POLLERR | POLLHUP | POLLNVAL)) break;
         if (pf[0].revents & POLLIN) {
