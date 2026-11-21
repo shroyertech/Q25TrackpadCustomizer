@@ -77,9 +77,6 @@ class AppSwitchService : AccessibilityService() {
         if (key == null || key.startsWith(Prefs.EDGE_KEY_PREFIX)) {
             mainHandler.post { edgeScroller.refresh() }
         }
-        if (key == null || key.startsWith(Prefs.PAD_GESTURES_KEY_PREFIX)) {
-            mainHandler.post { refreshPadGestures() }
-        }
         if (key == null || key.startsWith("scroll_")) {
             mainHandler.post { syncTouchScroll() }
         }
@@ -95,9 +92,18 @@ class AppSwitchService : AccessibilityService() {
 
     private var touchScrollActive = false
 
+    /** Package whose scroll settings apply now (null = global, used by the practice page). */
+    private fun scrollSettingsPackage(): String? =
+        if (AppState.practiceActive) null else AppState.currentForegroundPackage
+
+    /** Re-check touch scroll after the practice page opens or closes. */
+    fun refreshScrollState() {
+        mainHandler.post { syncTouchScroll() }
+    }
+
     private fun touchScrollWanted(mode: Mode? = AppState.currentMode): Boolean =
         mode == Mode.SCROLL_WHEEL &&
-                prefs.getEffectiveScrollSettings(AppState.currentForegroundPackage).method == ScrollMethod.TOUCH &&
+                prefs.getEffectiveScrollSettings(scrollSettingsPackage()).method == ScrollMethod.TOUCH &&
                 java.io.File(touchHelperPath()).exists()
 
     private fun touchHelperPath(): String = applicationInfo.nativeLibraryDir + "/libq25touch.so"
@@ -106,7 +112,7 @@ class AppSwitchService : AccessibilityService() {
     private fun syncTouchScroll() {
         val want = touchScrollWanted()
         if (want) {
-            val s = prefs.getEffectiveScrollSettings(AppState.currentForegroundPackage)
+            val s = prefs.getEffectiveScrollSettings(scrollSettingsPackage())
             val dm = android.util.DisplayMetrics()
             @Suppress("DEPRECATION")
             (getSystemService(WINDOW_SERVICE) as android.view.WindowManager).defaultDisplay.getRealMetrics(dm)
@@ -229,7 +235,6 @@ class AppSwitchService : AccessibilityService() {
         mainHandler.post { onModeChangedMain() }
         edgeScroller.refresh()
         wheelInjector.onHelperLine = { line -> onHelperLine(line) }
-        refreshPadGestures()
 
         // Apply the right mode for whatever is already on screen (e.g. after the service
         // was restarted), instead of waiting for the next app switch.
@@ -406,7 +411,7 @@ class AppSwitchService : AccessibilityService() {
     private fun handleScrollKey(event: KeyEvent) {
         lastScrollKeyUptime = SystemClock.uptimeMillis()
         val pkg = AppState.currentForegroundPackage
-        val settings = prefs.getEffectiveScrollSettings(pkg)
+        val settings = prefs.getEffectiveScrollSettings(scrollSettingsPackage())
         val steps = settings.sensitivity.steps
         val notches = settings.sensitivity.wheelNotches
         val useWheel = false
@@ -1304,79 +1309,8 @@ class AppSwitchService : AccessibilityService() {
         }
     }
 
-    // ---------- TRACKPAD TAP GESTURES (experimental) ----------
-
-    private fun refreshPadGestures() {
-        val on = prefs.isPadGesturesUsedAnywhere()
-        wheelInjector.setTapDetection(on)
-        AppState.padTapStatus = if (on) "Starting tap detection (needs root)…" else "Tap gestures are off"
-    }
-
     private fun onHelperLine(line: String) {
-        when {
-            line.startsWith("pad ") -> {
-                val devs = line.removePrefix("pad ").trim()
-                AppState.padTapStatus = if (devs == "no-device") "No trackpad input device found"
-                else "Listening for taps on $devs"
-                android.util.Log.i("Q25PadTap", "helper: $line")
-            }
-            line.startsWith("touch ") -> android.util.Log.i("Q25Touch", "helper: $line")
-            line.startsWith("tap ") -> {
-                val n = line.removePrefix("tap ").trim().toIntOrNull() ?: return
-                handlePadTaps(n)
-            }
-        }
-    }
-
-    private fun handlePadTaps(taps: Int) {
-        val fg = AppState.currentForegroundPackage
-        val settings = prefs.getEffectivePadGestureSettings(fg)
-        android.util.Log.i("Q25PadTap", "taps=$taps pkg=$fg enabled=${settings.enabled}")
-        if (!settings.enabled) return
-        // Two quick double taps can merge into one 4-tap sequence: run the double tap twice.
-        val action = when (taps) {
-            2, 4 -> settings.doubleTap
-            3 -> settings.tripleTap
-            else -> return
-        }
-        val repeats = if (taps == 4) 2 else 1
-        AppState.padTapStatus = "Last gesture: $taps taps → ${action.label}"
-
-        // Always announce the gesture, so automation apps (Tasker, MacroDroid…) can react.
-        try {
-            sendBroadcast(Intent(PadTapAction.BROADCAST_ACTION).apply {
-                putExtra(PadTapAction.EXTRA_TAPS, taps)
-                putExtra(PadTapAction.EXTRA_PACKAGE, fg)
-            })
-        } catch (_: Exception) {
-        }
-
-        repeat(repeats) { performPadTapAction(action) }
-    }
-
-    private fun performPadTapAction(action: PadTapAction) {
-        when (action) {
-            PadTapAction.NONE -> Unit
-            PadTapAction.QUICK_TOGGLE -> {
-                val next = QuickToggle.perform(this)
-                edgeScroller.updateStrips()
-                if (next == Mode.SCROLL_WHEEL) wheelInjector.ensureStarted()
-                else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) scrollEngine?.cancel()
-            }
-            PadTapAction.CLICK -> wheelInjector.click(1)
-            PadTapAction.DOUBLE_CLICK -> wheelInjector.click(2)
-            PadTapAction.TRIPLE_CLICK -> wheelInjector.click(3)
-            PadTapAction.RIGHT_CLICK -> wheelInjector.click(0)
-            PadTapAction.BACK -> performGlobalAction(GLOBAL_ACTION_BACK)
-            PadTapAction.HOME -> performGlobalAction(GLOBAL_ACTION_HOME)
-            PadTapAction.RECENTS -> performGlobalAction(GLOBAL_ACTION_RECENTS)
-            PadTapAction.NOTIFICATIONS -> performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
-            PadTapAction.SCREENSHOT -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT)
-            }
-            PadTapAction.KEY_F9, PadTapAction.KEY_F10,
-            PadTapAction.KEY_F11, PadTapAction.KEY_F12 -> wheelInjector.key(action.keyCode)
-        }
+        if (line.startsWith("touch ")) android.util.Log.i("Q25Touch", "helper: $line")
     }
 
     // ---------- SCROLL HELPERS ----------
@@ -1622,7 +1556,7 @@ class AppSwitchService : AccessibilityService() {
     private fun handleForegroundAppChanged(packageName: String) {
         if (isIgnoredForegroundPackage(packageName)) return
 
-        // After a manual switch (Quick Toggle, tap gesture) for the app in front, a stray
+        // After a manual switch (Quick Toggle) for the app in front, a stray
         // window event from another package (e.g. a launcher reacting to our overlay
         // windows) must not undo it: only accept it if that app's window really has focus.
         val override = AppState.manualOverrideForPackage

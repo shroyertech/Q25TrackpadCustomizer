@@ -79,11 +79,7 @@ object Diagnostics {
         if (hasRoot) {
             val uinput = RootShell.run("[ -c /dev/uinput ] && echo y").output.contains("y")
             line("/dev/uinput", if (uinput) "yes" else "NO")
-            // Keyboard-mode taps come from the trackpad driver's kernel log, when it prints one.
-            val kmsg = RootShell.run("dmesg 2>/dev/null | grep -c 'X Reg:'").output.trim().toIntOrNull() ?: 0
-            line("Driver touch log (Keyboard-mode taps)", if (kmsg > 0) "yes" else "no (taps use the fallback marker)")
         }
-        line("Tap detection", AppState.padTapStatus)
         line("Edge scroll", AppState.edgeScrollStatus)
 
         val prefs = Prefs(context)

@@ -27,11 +27,12 @@ object AppState {
     var rootErrorShown: Boolean = false
 
     // Diagnostics for experimental features, shown in Settings.
+    /** True while the scroll practice page is open: scrolling uses the global settings. */
     @Volatile
-    var edgeScrollStatus: String = "Accessibility service not running"
+    var practiceActive: Boolean = false
 
     @Volatile
-    var padTapStatus: String = "Accessibility service not running"
+    var edgeScrollStatus: String = "Accessibility service not running"
 
     // ---- Text-input override ----
 

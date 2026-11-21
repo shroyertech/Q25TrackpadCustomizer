@@ -4,8 +4,8 @@ import android.content.Context
 
 /**
  * Quick Toggle: cycle the trackpad to the next mode in this app's Quick Toggle set.
- * Used by [QuickToggleActivity] (shortcuts / key mapper apps) and by the double-tap
- * trackpad gesture in [AppSwitchService].
+ * Used by [QuickToggleActivity] (shortcuts / key mapper apps), the Quick Toggle
+ * broadcast and the mode notification.
  */
 object QuickToggle {
 

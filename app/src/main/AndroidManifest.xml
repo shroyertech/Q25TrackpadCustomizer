@@ -47,6 +47,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".ScrollPracticeActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".QuickToggleActivity"
             android:exported="true"
             android:theme="@android:style/Theme.NoDisplay"

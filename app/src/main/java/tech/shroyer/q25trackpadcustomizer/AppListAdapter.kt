@@ -149,10 +149,6 @@ class AppListAdapter(
         val checkEdgeDown = dialogView.findViewById<CheckBox>(R.id.checkAppEdgeDown)
         val checkEdgeLeft = dialogView.findViewById<CheckBox>(R.id.checkAppEdgeLeft)
         val checkEdgeRight = dialogView.findViewById<CheckBox>(R.id.checkAppEdgeRight)
-        val checkPadGestures = dialogView.findViewById<CheckBox>(R.id.checkAppPadGestures)
-        val spinnerPadDouble = dialogView.findViewById<Spinner>(R.id.spinnerAppPadDoubleTap)
-        val spinnerPadTriple = dialogView.findViewById<Spinner>(R.id.spinnerAppPadTripleTap)
-
         // Primary Hold
         val spinnerHold1Mode = dialogView.findViewById<Spinner>(R.id.spinnerAppHoldMode)
         val tvHold1KeyCode = dialogView.findViewById<TextView>(R.id.tvAppHoldKeyCode)
@@ -320,7 +316,7 @@ class AppListAdapter(
         // ----- Auto keyboard -----
         checkAutoKeyboard.isChecked = prefs.isEffectiveAutoKeyboardForTextEnabled(app.packageName)
 
-        // ----- Experimental: edge auto-scroll + double-tap toggle -----
+        // ----- Experimental: edge auto-scroll -----
         val edge = prefs.getEffectiveEdgeScrollSettings(app.packageName)
         checkEdge.isChecked = edge.enabled
         checkEdgeUp.isChecked = edge.up
@@ -337,33 +333,6 @@ class AppListAdapter(
         }
         updateEdgeDirsState()
         checkEdge.setOnCheckedChangeListener { _, _ -> updateEdgeDirsState() }
-        val padGlobal = prefs.getGlobalPadGestureSettings()
-        checkPadGestures.isChecked = prefs.getEffectivePadGestureSettings(app.packageName).enabled
-        // Entry 0 = follow global; then every action.
-        val padActions = PadTapAction.values().toList()
-        fun padAdapter(global: PadTapAction) = ArrayAdapter(
-            context,
-            android.R.layout.simple_spinner_item,
-            listOf("Use global (${global.label})") + padActions.map { it.label }
-        ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-        spinnerPadDouble.adapter = padAdapter(padGlobal.doubleTap)
-        spinnerPadTriple.adapter = padAdapter(padGlobal.tripleTap)
-        spinnerPadDouble.setSelection(
-            prefs.getAppPadTapActionOverride(app.packageName, 2)?.let { padActions.indexOf(it) + 1 } ?: 0, false
-        )
-        spinnerPadTriple.setSelection(
-            prefs.getAppPadTapActionOverride(app.packageName, 3)?.let { padActions.indexOf(it) + 1 } ?: 0, false
-        )
-        fun updatePadState() {
-            val on = checkPadGestures.isChecked
-            for (v in listOf(spinnerPadDouble, spinnerPadTriple)) {
-                v.isEnabled = on
-                v.alpha = if (on) 1f else 0.5f
-            }
-        }
-        updatePadState()
-        checkPadGestures.setOnCheckedChangeListener { _, _ -> updatePadState() }
-
         // ----- Hold mode adapters -----
         val holdModeAdapter = ArrayAdapter(
             context,
@@ -616,13 +585,6 @@ class AppListAdapter(
                     left = checkEdgeLeft.isChecked,
                     right = checkEdgeRight.isChecked
                 )
-                prefs.setAppPadGestures(
-                    app.packageName,
-                    enabled = checkPadGestures.isChecked,
-                    doubleTap = spinnerPadDouble.selectedItemPosition.let { if (it <= 0) null else padActions[it - 1] },
-                    tripleTap = spinnerPadTriple.selectedItemPosition.let { if (it <= 0) null else padActions[it - 1] }
-                )
-
                 val desiredAuto = checkAutoKeyboard.isChecked
                 val globalAuto = prefs.isGlobalAutoKeyboardForTextEnabled()
                 prefs.setAppAutoKeyboardOverride(app.packageName, if (desiredAuto == globalAuto) null else desiredAuto)

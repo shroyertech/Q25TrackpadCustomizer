@@ -147,7 +147,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Scroll wheel mode: method, speed, inertia"
+                    android:text="Scroll wheel mode: method, speed, practice board"
                     android:textSize="12sp"
                     android:textColor="?android:attr/textColorSecondary" />
             </LinearLayout>
@@ -176,7 +176,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Experimental: trackpad taps, edge auto-scroll"
+                    android:text="Experimental: edge auto-scroll"
                     android:textSize="12sp"
                     android:textColor="?android:attr/textColorSecondary" />
             </LinearLayout>
@@ -615,6 +615,18 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:visibility="gone">
+            <Button
+                android:id="@+id/btnScrollPractice"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Try it: scroll practice" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="A big board you can scroll around with the trackpad, with the method and speed right above it."
+                android:textSize="11sp"
+                android:textColor="?android:attr/textColorSecondary"
+                android:layout_marginBottom="12dp" />
             <!-- Global scroll wheel settings -->
             <TextView
                 android:id="@+id/tvScrollSettingsLabel"
@@ -826,45 +838,6 @@
                 android:layout_marginBottom="8dp" />
             <TextView
                 android:id="@+id/tvEdgeScrollStatus"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text=""
-                android:textSize="11sp"
-                android:textStyle="italic"
-                android:textColor="?android:attr/textColorSecondary"
-                android:layout_marginBottom="8dp" />
-            <CheckBox
-                android:id="@+id/checkPadGestures"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Trackpad tap gestures (experimental): double and triple tap the pad surface"
-                android:textSize="12sp" />
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Double tap action"
-                android:textSize="12sp" />
-            <Spinner
-                android:id="@+id/spinnerPadDoubleTap"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Triple tap action"
-                android:textSize="12sp" />
-            <Spinner
-                android:id="@+id/spinnerPadTripleTap"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Tap the pad surface (not the click). Works in every mode (taps are recognised from the pad’s motion). Needs root. The Quick Toggle shortcut still works for key mapper apps. Every gesture is also broadcast as tech.shroyer.q25trackpadcustomizer.PAD_TAP (extra: taps = 2 or 3) for Tasker/MacroDroid, and the F9-F12 actions can be used as Key Mapper triggers. Each app can override these."
-                android:textSize="11sp"
-                android:textColor="?android:attr/textColorSecondary" />
-            <TextView
-                android:id="@+id/tvPadTapStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text=""

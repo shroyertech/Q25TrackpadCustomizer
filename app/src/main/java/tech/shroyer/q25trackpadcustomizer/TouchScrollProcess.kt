@@ -6,11 +6,9 @@ import java.io.InputStreamReader
 /**
  * Runs inside the root helper ([WheelInjectorMain]): starts and stops the native
  * touch-scroll program (libq25touch.so), which grabs the trackpad and turns its motion into
- * a virtual finger. Its motion reports are passed on for tap detection.
+ * a virtual finger.
  */
 class TouchScrollProcess(
-    private val onRel: (Int, Int) -> Unit,
-    private val onKey: () -> Unit,
     private val onStatus: (String) -> Unit
 ) {
     private var process: Process? = null
@@ -64,12 +62,6 @@ class TouchScrollProcess(
                     val line = r.readLine() ?: break
                     val parts = line.split(' ')
                     when (parts.firstOrNull()) {
-                        "r" -> {
-                            val dx = parts.getOrNull(1)?.toIntOrNull() ?: continue
-                            val dy = parts.getOrNull(2)?.toIntOrNull() ?: continue
-                            onRel(dx, dy)
-                        }
-                        "b" -> onKey()
                         "ok" -> onStatus("ok")
                         "e" -> onStatus("err ${parts.getOrNull(1) ?: "?"} ${parts.getOrNull(2) ?: ""}".trim())
                     }

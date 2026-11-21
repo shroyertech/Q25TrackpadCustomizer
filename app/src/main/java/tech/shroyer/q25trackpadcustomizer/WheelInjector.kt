@@ -82,19 +82,9 @@ class WheelInjector(context: Context) {
         return true
     }
 
-    /** Lines the helper prints after start ("tap 2", "pad ..."), delivered on the main thread. */
+    /** Lines the helper prints after start ("touch ok", ...), delivered on the main thread. */
     @Volatile
     var onHelperLine: ((String) -> Unit)? = null
-
-    @Volatile
-    private var tapDetection = false
-
-    /** Turn trackpad tap detection on/off (remembered across helper restarts). */
-    fun setTapDetection(on: Boolean) {
-        tapDetection = on
-        if (on) ensureStarted()
-        send("t ${if (on) 1 else 0}\n")
-    }
 
     @Volatile
     private var touchConfig: String? = null
@@ -112,9 +102,6 @@ class WheelInjector(context: Context) {
 
     /** Click at the cursor: 1..3 left clicks, 0 = right click. */
     fun click(count: Int): Boolean = send("k $count\n")
-
-    /** Inject a key press (e.g. for key mapper apps). */
-    fun key(keyCode: Int): Boolean = send("e $keyCode\n")
 
     private fun send(line: String): Boolean {
         if (!isReady) {
@@ -180,7 +167,6 @@ class WheelInjector(context: Context) {
             if (line == "ready") {
                 try {
                     w.write(configLine())
-                    if (tapDetection) w.write("t 1\n")
                     touchConfig?.let { w.write("u 1 $it\n") }
                     w.flush()
                 } catch (_: Exception) {
