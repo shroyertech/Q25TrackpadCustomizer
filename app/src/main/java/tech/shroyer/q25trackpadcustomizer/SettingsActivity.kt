@@ -150,9 +150,9 @@ class SettingsActivity : AppCompatActivity() {
     )
 
     private val scrollInertiaLabels = listOf(
-        "Off (stop where you stop)",
+        "Off (stops where you stop)",
         "Low",
-        "Medium",
+        "Normal (original)",
         "High"
     )
 
@@ -498,7 +498,7 @@ class SettingsActivity : AppCompatActivity() {
                 spinnerScrollMethod.setSelection(methodIdx, false)
             }
             checkScrollHomeShortcuts.isChecked = prefs.isScrollHomeShortcutsEnabled()
-            val inertiaIdx = scrollInertiaOptions.indexOf(prefs.getScrollInertia()).coerceAtLeast(0)
+            val inertiaIdx = scrollInertiaOptions.indexOf(prefs.getClassicInertia()).coerceAtLeast(0)
             if (spinnerScrollInertia.selectedItemPosition != inertiaIdx) {
                 spinnerScrollInertia.setSelection(inertiaIdx, false)
             }
@@ -1507,11 +1507,11 @@ If you’re using something else, look for a “Superuser / SU” permission lis
         inertiaAdapter.setDropDownViewResource(AndroidR.layout.simple_spinner_dropdown_item)
         spinnerScrollInertia.adapter = inertiaAdapter
         spinnerScrollInertia.setSelection(
-            scrollInertiaOptions.indexOf(prefs.getScrollInertia()).coerceAtLeast(0), false
+            scrollInertiaOptions.indexOf(prefs.getClassicInertia()).coerceAtLeast(0), false
         )
         spinnerScrollInertia.setOnItemSelectedListenerSimple { position ->
             if (suppressUiListeners) return@setOnItemSelectedListenerSimple
-            prefs.setScrollInertia(scrollInertiaOptions[position])
+            prefs.setClassicInertia(scrollInertiaOptions[position])
         }
     }
 

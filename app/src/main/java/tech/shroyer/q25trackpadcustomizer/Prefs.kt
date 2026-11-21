@@ -585,6 +585,14 @@ class Prefs(context: Context) {
         prefs.edit().putInt(KEY_SCROLL_GLOBAL_SMOOTHNESS, smoothness.prefValue).apply()
     }
 
+    /** Classic method: how much the content glides after each swipe (MEDIUM = original). */
+    fun getClassicInertia(): ScrollInertia =
+        ScrollInertia.fromPrefValue(prefs.getInt(KEY_SCROLL_CLASSIC_INERTIA, ScrollInertia.MEDIUM.prefValue))
+
+    fun setClassicInertia(inertia: ScrollInertia) {
+        prefs.edit().putInt(KEY_SCROLL_CLASSIC_INERTIA, inertia.prefValue).apply()
+    }
+
     fun getScrollInertia(): ScrollInertia =
         ScrollInertia.fromPrefValue(prefs.getInt(KEY_SCROLL_GLOBAL_INERTIA, ScrollInertia.MEDIUM.prefValue))
 
@@ -882,6 +890,7 @@ class Prefs(context: Context) {
         private const val KEY_SCROLL_GLOBAL_METHOD = "scroll_global_method_v2"
         private const val KEY_SCROLL_HOME_SHORTCUTS = "scroll_home_shortcuts"
         private const val KEY_SCROLL_GLOBAL_INERTIA = "scroll_global_inertia"
+        private const val KEY_SCROLL_CLASSIC_INERTIA = "scroll_classic_inertia"
 
         // Edge auto-scroll (experimental)
         private const val KEY_EDGE_ENABLED = "edge_scroll_enabled"

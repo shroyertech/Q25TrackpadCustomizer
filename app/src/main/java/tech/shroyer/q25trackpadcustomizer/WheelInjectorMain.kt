@@ -29,6 +29,7 @@ import kotlin.math.pow
  *                       add v / h wheel notches at screen point (x, y);
  *                       ease (0..1) = share of the queue released per 60 Hz frame;
  *                       inertia 0..3 = glide after the input stops (0 = none)
+ *   v <0|1>             touch-scroll event lines on/off (prints "touch ev ...")
  *   k <n>               click at the cursor: n = 1..3 left clicks, 0 = right click
  *   u 1 <helper> <w> <h> <scale> <horiz> <invV> <invH> / u 0
  *                       start / stop touch scrolling (native helper, virtual finger)
@@ -209,6 +210,7 @@ object WheelInjectorMain {
                         touch.stop()
                     }
                 }
+                "v" -> touch.verbose = parts.getOrNull(1) == "1"
                 "k" -> {
                     val n = parts.getOrNull(1)?.toIntOrNull()?.coerceIn(0, 3) ?: 1
                     clicker.execute { TrackpadDevices.click(n) }

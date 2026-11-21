@@ -100,6 +100,16 @@ class WheelInjector(context: Context) {
         send(if (config != null) "u 1 $config\n" else "u 0\n")
     }
 
+    @Volatile
+    private var touchVerbose = false
+
+    /** Touch-scroll event lines for the practice log on/off (remembered across restarts). */
+    fun setTouchVerbose(on: Boolean) {
+        if (on == touchVerbose) return
+        touchVerbose = on
+        send("v ${if (on) 1 else 0}\n")
+    }
+
     /** Click at the cursor: 1..3 left clicks, 0 = right click. */
     fun click(count: Int): Boolean = send("k $count\n")
 
@@ -168,6 +178,7 @@ class WheelInjector(context: Context) {
                 try {
                     w.write(configLine())
                     touchConfig?.let { w.write("u 1 $it\n") }
+                    if (touchVerbose) w.write("v 1\n")
                     w.flush()
                 } catch (_: Exception) {
                 }

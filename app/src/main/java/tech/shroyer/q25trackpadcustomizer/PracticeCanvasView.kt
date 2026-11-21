@@ -22,11 +22,12 @@ import kotlin.math.min
 class PracticeCanvasView(context: Context) : View(context) {
 
     private val density = resources.displayMetrics.density
-    private val cell = 120f * density            // one grid square
+    // Grid squares are sized so exactly four fit across the screen (nothing cut off).
+    private var cell = 120f * density
     private val cols = 24
     private val rows = 60
-    private val boardW = cols * cell
-    private val boardH = rows * cell
+    private val boardW get() = cols * cell
+    private val boardH get() = rows * cell
 
     private var offX = 0f
     private var offY = 0f
@@ -42,6 +43,11 @@ class PracticeCanvasView(context: Context) : View(context) {
 
     /** Called with the visible position (in grid squares) whenever it changes. */
     var onPositionChanged: ((col: Int, row: Int) -> Unit)? = null
+
+    /** Gets a line for the practice log on touch down/up, flings and wheel events. */
+    var log: ((String) -> Unit)? = null
+    private var dragStartX = 0f
+    private var dragStartY = 0f
 
     private val dark = (resources.configuration.uiMode and
             android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
@@ -60,11 +66,6 @@ class PracticeCanvasView(context: Context) : View(context) {
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = if (dark) Color.rgb(225, 225, 235) else Color.rgb(40, 40, 50)
         textSize = 14f * density
-    }
-    private val bigPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = labelPaint.color
-        textSize = 20f * density
-        isFakeBoldText = true
     }
     private val barPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = if (dark) Color.argb(150, 255, 255, 255) else Color.argb(120, 0, 0, 0)
@@ -105,6 +106,13 @@ class PracticeCanvasView(context: Context) : View(context) {
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
+        if (w > 0) {
+            val col = offX / cell
+            val row = offY / cell
+            cell = w / 4f
+            offX = col * cell
+            offY = row * cell
+        }
         moveBy(0f, 0f)
     }
 
@@ -116,8 +124,11 @@ class PracticeCanvasView(context: Context) : View(context) {
                 scroller.forceFinished(true)
                 lastX = event.x
                 lastY = event.y
+                dragStartX = offX
+                dragStartY = offY
                 dragging = false
                 parent?.requestDisallowInterceptTouchEvent(true)
+                log?.invoke("board down ${event.x.toInt()},${event.y.toInt()}")
             }
             MotionEvent.ACTION_MOVE -> {
                 val dx = lastX - event.x
@@ -133,7 +144,12 @@ class PracticeCanvasView(context: Context) : View(context) {
                 velocity?.computeCurrentVelocity(1000, maxFling.toFloat())
                 val vx = -(velocity?.xVelocity ?: 0f)
                 val vy = -(velocity?.yVelocity ?: 0f)
-                if (abs(vx) > minFling || abs(vy) > minFling) {
+                val flung = abs(vx) > minFling || abs(vy) > minFling
+                log?.invoke(
+                    "board up moved ${(offX - dragStartX).toInt()},${(offY - dragStartY).toInt()}" +
+                            " v ${vx.toInt()},${vy.toInt()}${if (flung) " fling" else ""}"
+                )
+                if (flung) {
                     scroller.fling(
                         offX.toInt(), offY.toInt(), vx.toInt(), vy.toInt(),
                         0, maxX().toInt(), 0, maxY().toInt()
@@ -144,6 +160,7 @@ class PracticeCanvasView(context: Context) : View(context) {
                 velocity = null
             }
             MotionEvent.ACTION_CANCEL -> {
+                log?.invoke("board cancel moved ${(offX - dragStartX).toInt()},${(offY - dragStartY).toInt()}")
                 velocity?.recycle()
                 velocity = null
             }
@@ -158,6 +175,7 @@ class PracticeCanvasView(context: Context) : View(context) {
             val v = event.getAxisValue(MotionEvent.AXIS_VSCROLL)
             val h = event.getAxisValue(MotionEvent.AXIS_HSCROLL)
             scroller.forceFinished(true)
+            log?.invoke("board wheel v=$v h=$h")
             moveBy(h * step, -v * step)
             return true
         }
@@ -203,13 +221,6 @@ class PracticeCanvasView(context: Context) : View(context) {
         for (r in r0..r1 + 1) {
             val y = r * cell - offY
             canvas.drawLine(0f, y, width.toFloat(), y, if (r % 5 == 0) majorPaint else gridPaint)
-        }
-
-        // Row markers down the left side so vertical progress is easy to read.
-        for (r in r0..r1) {
-            if (r % 5 != 0) continue
-            val y = r * cell - offY + cell / 2 + bigPaint.textSize / 2
-            canvas.drawText("Row ${r + 1}", 8f * density, y, bigPaint)
         }
 
         // Scroll bars.

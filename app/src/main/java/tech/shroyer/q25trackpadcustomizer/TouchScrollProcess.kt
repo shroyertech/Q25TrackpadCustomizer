@@ -12,6 +12,10 @@ class TouchScrollProcess(
     private val onStatus: (String) -> Unit
 ) {
     private var process: Process? = null
+
+    /** Pass motion/finger lines on as "ev ..." (for the scroll practice log). */
+    @Volatile
+    var verbose = false
     private var args: List<String>? = null
 
     /** [cmd] = helper path, device, width, height, scale, horizontal, invertV, invertH. */
@@ -62,6 +66,7 @@ class TouchScrollProcess(
                     val line = r.readLine() ?: break
                     val parts = line.split(' ')
                     when (parts.firstOrNull()) {
+                        "r", "g", "b" -> if (verbose) onStatus("ev $line")
                         "ok" -> onStatus("ok")
                         "e" -> onStatus("err ${parts.getOrNull(1) ?: "?"} ${parts.getOrNull(2) ?: ""}".trim())
                     }

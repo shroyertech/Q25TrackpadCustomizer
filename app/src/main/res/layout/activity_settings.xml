@@ -755,14 +755,12 @@
                 android:textSize="12sp" />
             <TextView
                 android:id="@+id/tvScrollInertiaLabel"
-                android:visibility="gone"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Inertia: glide after a quick flick (Wheel and Drag methods; Classic uses the app’s own fling)"
+                android:text="Inertia (Classic method): how far the page glides after each swipe"
                 android:textSize="12sp" />
             <Spinner
                 android:id="@+id/spinnerScrollInertia"
-                android:visibility="gone"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp" />

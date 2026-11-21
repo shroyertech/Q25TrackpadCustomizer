@@ -113,7 +113,10 @@ class AppSwitchService : AccessibilityService() {
 
     /** Re-check touch scroll after the practice page opens or closes. */
     fun refreshScrollState() {
-        mainHandler.post { syncTouchScroll() }
+        mainHandler.post {
+            syncTouchScroll()
+            wheelInjector.setTouchVerbose(AppState.practiceActive)
+        }
     }
 
     private fun touchScrollWanted(mode: Mode? = AppState.currentMode): Boolean =
@@ -466,6 +469,9 @@ class AppSwitchService : AccessibilityService() {
         val notches = settings.sensitivity.wheelNotches
         val useWheel = false
 
+        if (AppState.practiceActive) {
+            PracticeLog.add("key ${KeyEvent.keyCodeToString(event.keyCode).removePrefix("KEYCODE_")} ${settings.method} steps=$steps")
+        }
         // Classic, and Touch when arrow keys still arrive (no root / helper not running yet).
         if (settings.method == ScrollMethod.CLASSIC || settings.method == ScrollMethod.TOUCH) {
             classicScroll(event.keyCode, settings, steps)
@@ -1360,7 +1366,13 @@ class AppSwitchService : AccessibilityService() {
     }
 
     private fun onHelperLine(line: String) {
-        if (line.startsWith("touch ")) android.util.Log.i("Q25Touch", "helper: $line")
+        when {
+            line.startsWith("touch ev ") -> PracticeLog.add(line.removePrefix("touch ev "))
+            line.startsWith("touch ") -> {
+                android.util.Log.i("Q25Touch", "helper: $line")
+                PracticeLog.add(line)
+            }
+        }
     }
 
     // ---------- SCROLL HELPERS ----------
@@ -1492,14 +1504,56 @@ class AppSwitchService : AccessibilityService() {
         startY: Float,
         endX: Float,
         endY: Float,
-        durationMs: Long
+        durationMs: Long,
+        willContinue: Boolean = false
     ): GestureDescription {
         val path = Path().apply {
             moveTo(startX, startY)
             lineTo(endX, endY)
         }
-        val stroke = GestureDescription.StrokeDescription(path, 0, durationMs)
+        val stroke = if (willContinue && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            GestureDescription.StrokeDescription(path, 0, durationMs, true)
+        } else {
+            GestureDescription.StrokeDescription(path, 0, durationMs)
+        }
         return GestureDescription.Builder().addStroke(stroke).build()
+    }
+
+    /**
+     * One Classic swipe. Inertia (glide after the swipe) is set by how the finger leaves:
+     * Off holds the finger still at the end before lifting, so the app doesn't fling; Low is
+     * a slower swipe, Normal the original one, High a quicker one that flings further.
+     */
+    private fun classicSwipe(startX: Float, startY: Float, endX: Float, endY: Float, baseDuration: Long): Boolean {
+        val inertia = prefs.getClassicInertia()
+        val duration = when (inertia) {
+            ScrollInertia.LOW -> baseDuration * 8 / 5
+            ScrollInertia.HIGH -> baseDuration * 3 / 5
+            else -> baseDuration
+        }
+        if (AppState.practiceActive) PracticeLog.add("swipe ${inertia.name.lowercase()} ${(endX - startX).toInt()},${(endY - startY).toInt()} ${duration}ms")
+        if (inertia != ScrollInertia.OFF || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return dispatchGesture(buildGestureStroke(startX, startY, endX, endY, duration), null, null)
+        }
+        val path = Path().apply {
+            moveTo(startX, startY)
+            lineTo(endX, endY)
+        }
+        val move = GestureDescription.StrokeDescription(path, 0, duration, true)
+        val holdPath = Path().apply {
+            moveTo(endX, endY)
+            lineTo(endX, endY + 0.5f)
+        }
+        val hold = move.continueStroke(holdPath, 0, CLASSIC_HOLD_MS, false)
+        return dispatchGesture(
+            GestureDescription.Builder().addStroke(move).build(),
+            object : GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription?) {
+                    dispatchGesture(GestureDescription.Builder().addStroke(hold).build(), null, null)
+                }
+            },
+            null
+        )
     }
 
     private fun performVerticalGesture(up: Boolean, steps: Int): Boolean {
@@ -1521,8 +1575,7 @@ class AppSwitchService : AccessibilityService() {
             (centerY - distance / 2f) to (centerY + distance / 2f)
         }
 
-        val gesture = buildGestureStroke(centerX, startY, centerX, endY, duration)
-        return dispatchGesture(gesture, null, null)
+        return classicSwipe(centerX, startY, centerX, endY, duration)
     }
 
     private fun performHorizontalGesture(left: Boolean, steps: Int): Boolean {
@@ -1543,8 +1596,7 @@ class AppSwitchService : AccessibilityService() {
             (centerX - distance / 2f) to (centerX + distance / 2f)
         }
 
-        val gesture = buildGestureStroke(startX, centerY, endX, centerY, duration)
-        return dispatchGesture(gesture, null, null)
+        return classicSwipe(startX, centerY, endX, centerY, duration)
     }
 
     private fun scrollVerticalNodeBased(up: Boolean, steps: Int) {
@@ -1817,6 +1869,7 @@ class AppSwitchService : AccessibilityService() {
         @Volatile
         var instance: AppSwitchService? = null
             private set
+        private const val CLASSIC_HOLD_MS = 70L
 
         private const val TEXT_OVERRIDE_CHECK_INTERVAL_MS = 350L
         private const val TEXT_RECENT_MS = 1200L

@@ -13,8 +13,9 @@
  *
  * Usage: libq25touch.so /dev/input/eventN width height scale horizontal invertV invertH
  *
- * Motion is also reported on stdout ("r dx dy", "b code value") for tap detection. Output
- * is non-blocking and dropped if the reader falls behind, so it can never stall input.
+ * Motion and finger events are reported on stdout ("r dx dy", "g <event> x y", "b code value")
+ * for the scroll practice log. Output is non-blocking and dropped if the reader falls
+ * behind, so it can never stall input.
  * Exits (releasing the grab and removing the virtual devices) on SIGTERM/SIGINT/SIGHUP or
  * when stdin closes, i.e. when the parent helper goes away.
  */
@@ -46,6 +47,10 @@
 #define IDLE_LIFT_MS 45
 /* Keep the virtual finger this far from the screen edges; re-grab in the middle. */
 #define EDGE_MARGIN_RATIO 0.12f
+/* Opposite-direction travel needed before the finger turns around. Single reports the
+ * other way are pad noise; reacting to each one restarted the drag on every report and the
+ * app never got past its touch slop, so scrolling back stopped working. */
+#define REVERSE_PX 36
 /* Ignore motion right after start (the grab can catch the tail of a gesture). */
 #define STARTUP_IGNORE_MS 150
 
@@ -62,6 +67,7 @@ static long t_last_motion = 0;
 static int pend_x = 0, pend_y = 0;   /* motion before activation (scaled px) */
 static float rem_x = 0, rem_y = 0;   /* sub-pixel remainders */
 static int last_sign_y = 0, last_sign_x = 0;
+static int rev_x = 0, rev_y = 0;     /* opposite-direction travel so far (scaled px) */
 
 static void on_signal(int s) { (void)s; g_running = 0; }
 
@@ -99,6 +105,7 @@ static void touch_down(int x, int y) {
     emit(g_touch, EV_ABS, ABS_MT_TOUCH_MAJOR, 4);
     emit(g_touch, EV_KEY, BTN_TOUCH, 1);
     emit(g_touch, EV_SYN, SYN_REPORT, 0);
+    out("g down %d %d\n", x, y);
 }
 
 static void touch_move(int x, int y) {
@@ -115,11 +122,13 @@ static void touch_up(void) {
         emit(g_touch, EV_ABS, ABS_MT_TRACKING_ID, -1);
         emit(g_touch, EV_KEY, BTN_TOUCH, 0);
         emit(g_touch, EV_SYN, SYN_REPORT, 0);
+        out("g up %d %d\n", t_x, t_y);
     }
     t_active = 0;
     pend_x = pend_y = 0;
     rem_x = rem_y = 0;
     last_sign_x = last_sign_y = 0;
+    rev_x = rev_y = 0;
 }
 
 /* Where a new drag starts: away from the side it is heading to, so it has room to travel. */
@@ -165,13 +174,34 @@ static void on_motion(int dx, int dy) {
 
     int sgn_y = my > 0 ? 1 : (my < 0 ? -1 : 0);
     int sgn_x = mx > 0 ? 1 : (mx < 0 ? -1 : 0);
-    /* Direction reversal: start a fresh drag so the app doesn't see a zig-zag fling. */
-    if ((sgn_y && last_sign_y && sgn_y != last_sign_y && abs(my) >= abs(mx)) ||
-        (sgn_x && last_sign_x && sgn_x != last_sign_x && abs(mx) > abs(my))) {
+    int rev_v = sgn_y && last_sign_y && sgn_y != last_sign_y && abs(my) >= abs(mx);
+    int rev_h = sgn_x && last_sign_x && sgn_x != last_sign_x && abs(mx) > abs(my);
+    if (rev_v || rev_h) {
+        /* Moving the other way: hold the finger still until it is clearly a turn-around,
+         * then start a fresh drag (no zig-zag fling) that moves by the whole amount at once,
+         * so the app passes its touch slop right away. */
+        rev_x += mx;
+        rev_y += my;
+        if (abs(rev_y) < REVERSE_PX && abs(rev_x) < REVERSE_PX) {
+            out("g hold %d %d\n", rev_x, rev_y);
+            return;
+        }
+        int ax = rev_v ? 0 : rev_x, ay = rev_v ? rev_y : 0;
+        if (!HORIZ) ax = 0;
         touch_up();
         int sx, sy;
-        start_point(mx, my, &sx, &sy);
+        start_point(ax, ay, &sx, &sy);
         touch_down(sx, sy);
+        out("g turn %d %d\n", ax, ay);
+        mx = clampi(ax, -ACTIVATION_PX * 2, ACTIVATION_PX * 2);
+        my = clampi(ay, -ACTIVATION_PX * 2, ACTIVATION_PX * 2);
+        sgn_y = my > 0 ? 1 : (my < 0 ? -1 : 0);
+        sgn_x = mx > 0 ? 1 : (mx < 0 ? -1 : 0);
+    } else {
+        /* Back to the same direction (it was noise): forget the opposite travel. */
+        if (sgn_y && sgn_y == last_sign_y) rev_y = 0;
+        if (sgn_x && sgn_x == last_sign_x) rev_x = 0;
+        if (!last_sign_y && !last_sign_x) rev_x = rev_y = 0;
     }
     if (sgn_y) last_sign_y = sgn_y;
     if (sgn_x) last_sign_x = sgn_x;
@@ -189,6 +219,7 @@ static void on_motion(int dx, int dy) {
         touch_up();
         int sx, sy;
         start_point(mx, my, &sx, &sy);
+        out("g regrip %d %d\n", mx, my);
         touch_down(sx, sy);
         last_sign_x = keep_x;
         last_sign_y = keep_y;
